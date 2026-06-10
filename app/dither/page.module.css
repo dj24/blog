@@ -1,0 +1,26 @@
+.page {
+  --dither-spacing: 4vmin;
+
+  display: flex;
+  min-height: 100vh;
+
+  font-family: var(--font-saira), sans-serif;
+}
+
+.leftPanel,
+.rightPanel {
+  flex: 1;
+}
+
+.leftPanel {
+  background: #000;
+  color: #fff;
+}
+
+.rightPanel {
+  padding: var(--dither-spacing);
+  font-family: var(--font-barlow-condensed), sans-serif;
+  letter-spacing: -0.5vmin;
+  display: flex;
+  flex-direction: column;
+}

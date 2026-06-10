@@ -25,7 +25,7 @@ const RootLayout = ({
 }>) => {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      Ï<Analytics/>
+      <Analytics/>
       <body>{children}</body>
     </html>
   );
