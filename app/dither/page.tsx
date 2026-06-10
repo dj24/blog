@@ -42,21 +42,58 @@ const Bayer = ({
       aspectRatio: "1",
     }}
   >
-    <div style={{ background: tlFilled ? "red" : "transparent" }}></div>
-    <div style={{ background: trFilled ? "red" : "transparent" }}></div>
-    <div style={{ background: blFilled ? "red" : "transparent" }}></div>
-    <div style={{ background: brFilled ? "red" : "transparent" }}></div>
+    <div
+      style={{
+        borderBottomLeftRadius: "100%",
+        background: tlFilled ? "var(--accent)" : "transparent",
+      }}
+    ></div>
+    <div
+      style={{
+        borderBottomLeftRadius: "100%",
+        background: trFilled ? "var(--accent)" : "transparent",
+      }}
+    ></div>
+    <div
+      style={{
+        borderBottomLeftRadius: "100%",
+        background: blFilled ? "var(--accent)" : "transparent",
+      }}
+    ></div>
+    <div
+      style={{
+        borderBottomLeftRadius: "100%",
+        background: brFilled ? "var(--accent)" : "transparent",
+      }}
+    ></div>
   </div>
 );
 
+const SquareCheckbox = () => {
+  return <input aria-label="Select card" className={styles.squareCheckbox} type="checkbox" />;
+};
+
 const Card = ({ children }: { children?: React.ReactNode }) => {
-  return <div style={{ flex: "1", background: "rgba(0,0,0,0.1)" }}>{children}</div>;
+  return <div className={styles.card}>{children}</div>;
+};
+
+const Palette = () => {
+  return (
+    <div style={{ display: "flex", gap: "calc(var(--dither-spacing) * 0.5)", flex: 1 }}>
+      <div style={{ flex: "1", aspectRatio: "1", background: "rgb(10,10,10)" }} />
+      <div style={{ flex: "1", aspectRatio: "1", background: "rgb(80,80,80)" }} />
+      <div style={{ flex: "1", aspectRatio: "1", background: "rgb(160,160,160)" }} />
+      <div style={{ flex: "1", aspectRatio: "1", background: "rgb(220,220,220)" }} />
+    </div>
+  );
 };
 
 const Page = () => {
   return (
     <main className={`${hankenGrotesk.variable} ${styles.page}`}>
-      <section className={styles.leftPanel}></section>
+      <section className={styles.leftPanel}>
+        <h2>preview</h2>
+      </section>
       <section className={styles.rightPanel}>
         <div
           style={{
@@ -68,23 +105,54 @@ const Page = () => {
         >
           {/*<p>This demo implements an ordered dithering effect on an uploaded image via WebGPU.</p>*/}
           <Panel>
-            <h2>Upload</h2>
+            <h2>upload</h2>
+            <p>select file</p>
             <div style={{ display: "flex", gap: "var(--dither-spacing)", flex: 1 }}>
               <Card />
             </div>
           </Panel>
           <Panel>
-            <h2>Settings</h2>
+            <h2>settings</h2>
             <div style={{ display: "flex", gap: "var(--dither-spacing)", flex: 1 }}>
-              <Card />
-              <Card />
+              <Card>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                >
+                  <p>monochromatic</p>
+                  <SquareCheckbox />
+                </div>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                >
+                  <p>contrast</p>
+                  <input type="range" id="contrast" name="contrast" min="0" max="11" />
+                </div>
+              </Card>
+              <Card>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                >
+                  <p>polychromatic</p>
+                  <SquareCheckbox />
+                </div>
+                <div
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                >
+                  <p>palette</p>
+                  <Palette />
+                </div>
+              </Card>
             </div>
           </Panel>
           <Panel>
-            <h2>Export</h2>
+            <h2>export</h2>
             <div style={{ display: "flex", gap: "var(--dither-spacing)", flex: 1 }}>
-              <Card />
-              <Card />
+              <Card>
+                <p>jpeg</p>
+              </Card>
+              <Card>
+                <p>png</p>
+              </Card>
             </div>
           </Panel>
         </div>
@@ -102,7 +170,9 @@ const Page = () => {
             <Bayer tlFilled brFilled trFilled />
             <Bayer trFilled blFilled brFilled tlFilled />
           </div>
-          <h1>Ordered Dithering</h1>
+          <h1>
+            ordered <span>dithering</span>
+          </h1>
         </div>
       </section>
     </main>
