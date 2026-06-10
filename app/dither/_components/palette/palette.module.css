@@ -1,0 +1,9 @@
+.palette {
+  display: flex;
+  gap: calc(var(--dither-spacing) * 0.5);
+}
+
+.swatch {
+  width: 2vmin;
+  height: 2vmin;
+}

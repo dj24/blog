@@ -1,0 +1,11 @@
+.card {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--dither-spacing) * 0.5);
+
+  /*border-top-left-radius: calc(var(--dither-spacing) * 2);*/
+  /*border-bottom-right-radius: calc(var(--dither-spacing) * 2);*/
+  /*background: var(--accent);*/
+}

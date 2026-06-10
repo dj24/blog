@@ -1,0 +1,15 @@
+.bayer {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  aspect-ratio: 1;
+}
+
+.cell {
+  border-bottom-left-radius: 100%;
+  background: transparent;
+}
+
+.filled {
+  background: var(--accent);
+}

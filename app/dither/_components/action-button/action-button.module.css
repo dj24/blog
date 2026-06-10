@@ -1,0 +1,13 @@
+.actionButton {
+  width: 2vmin;
+  height: 2vmin;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  appearance: none;
+  background: var(--accent);
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+}

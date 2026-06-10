@@ -1,0 +1,6 @@
+.icon {
+  width: 0.8vmin;
+  height: 0.8vmin;
+  border-bottom: 2px solid var(--background);
+  border-left: 2px solid var(--background);
+}
