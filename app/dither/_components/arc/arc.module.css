@@ -9,6 +9,5 @@
 
 .path {
   fill: var(--accent);
-  stroke-width: 2;
   stroke-linecap: square;
 }

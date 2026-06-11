@@ -1,15 +1,16 @@
 import { Arc } from "./_components/arc/arc";
 import { Hanken_Grotesk } from "next/font/google";
+import pearlEarring from "../pearl-earring.jpg";
 import { Bayer } from "./_components/bayer/bayer";
 import { Card } from "./_components/card/card";
 import { DownloadButton } from "./_components/download-button/download-button";
 import { Palette } from "./_components/palette/palette";
+import { PreviewCanvas } from "./_components/preview-canvas/preview-canvas";
 import { RangeInput } from "./_components/range-input/range-input";
 import { RenderTime } from "./_components/render-time/render-time";
 import { Resolution } from "./_components/resolution/resolution";
 import { SquareCheckbox } from "./_components/square-checkbox/square-checkbox";
 import { UploadButton } from "./_components/upload-button/upload-button";
-import { UvPreviewCanvas } from "./_components/uv-preview-canvas/uv-preview-canvas";
 import styles from "./page.module.css";
 
 const hankenGrotesk = Hanken_Grotesk({
@@ -26,7 +27,7 @@ const Page = () => {
           <h2>preview</h2>
           <RenderTime />
         </div>
-        <UvPreviewCanvas />
+        <PreviewCanvas defaultImageUrl={pearlEarring.src} />
       </section>
       <section className={styles.rightPanel}>
         <h1 className={styles.pageTitle}>ordered dithering</h1>
