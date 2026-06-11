@@ -4,6 +4,7 @@ import pearlEarring from "../pearl-earring.jpg";
 import { Bayer } from "./_components/bayer/bayer";
 import { Card } from "./_components/card/card";
 import { DownloadButton } from "./_components/download-button/download-button";
+import { MonochromaticPaletteControl } from "./_components/monochromatic-palette-control/monochromatic-palette-control";
 import { Palette } from "./_components/palette/palette";
 import { PreviewCanvas } from "./_components/preview-canvas/preview-canvas";
 import { RangeInput } from "./_components/range-input/range-input";
@@ -61,6 +62,10 @@ const Page = () => {
               <div className={styles.cardRow}>
                 <p>contrast</p>
                 <RangeInput id="contrast" name="contrast" min="0" max="11" />
+              </div>
+              <div className={styles.cardRow}>
+                <p>palette</p>
+                <MonochromaticPaletteControl />
               </div>
             </Card>
           </div>
