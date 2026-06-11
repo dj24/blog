@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { getPreviewResolution } from "../../_lib/get-preview-resolution";
 import { useDitherStore } from "../../_state/dither-store";
 import styles from "./preview-canvas.module.css";
 
@@ -9,10 +10,9 @@ export const PreviewCanvas = ({ defaultImageUrl }: { defaultImageUrl: string }) 
   const hasRequestedDefaultImageRef = useRef(false);
   const loadPreviewUrl = useDitherStore((state) => state.loadPreviewUrl);
   const previewStatus = useDitherStore((state) => state.previewStatus);
-  const resolutionWidth = useDitherStore((state) => state.resolutionWidth);
-  const resolutionHeight = useDitherStore((state) => state.resolutionHeight);
   const setPreviewCanvas = useDitherStore((state) => state.setPreviewCanvas);
   const sourceImage = useDitherStore((state) => state.sourceImage);
+  const previewResolution = getPreviewResolution(sourceImage);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -43,10 +43,12 @@ export const PreviewCanvas = ({ defaultImageUrl }: { defaultImageUrl: string }) 
         ref={canvasRef}
         aria-label="WebGPU preview"
         className={styles.canvas}
-        width={resolutionWidth}
-        height={resolutionHeight}
+        width={previewResolution?.width}
+        height={previewResolution?.height}
         style={{
-          aspectRatio: `${resolutionWidth} / ${resolutionHeight}`,
+          aspectRatio: previewResolution
+            ? `${previewResolution.width} / ${previewResolution.height}`
+            : undefined,
         }}
       />
       {previewStatus === "error" ? <p className={styles.status}>error</p> : null}

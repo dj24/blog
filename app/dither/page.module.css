@@ -49,6 +49,7 @@ body {
   width: 66.66vh;
   min-height: 100vh;
   flex-shrink: 0;
+  overflow: hidden;
   padding: var(--dither-spacing);
   background: var(--background);
   display: grid;

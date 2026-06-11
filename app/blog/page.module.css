@@ -3,6 +3,7 @@
   width: min(100%, 1080px);
   margin: 0 auto;
   padding: 72px 32px 96px;
+  overflow: hidden;
 }
 
 .header {

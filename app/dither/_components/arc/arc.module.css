@@ -4,6 +4,7 @@
   display: block;
   position: absolute;
   right: -7.5vmin;
+  transform: scale(-1);
   top: calc(-15vmin - var(--dither-spacing) / 2);
 }
 

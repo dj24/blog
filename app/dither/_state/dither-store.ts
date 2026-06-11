@@ -1,19 +1,14 @@
-import { create } from "zustand";
-import { runPreviewComputePipeline } from "../_lib/run-preview-compute-pipeline";
+import {create} from "zustand";
+import {getPreviewResolution} from "../_lib/get-preview-resolution";
+import {runPreviewComputePipeline} from "../_lib/run-preview-compute-pipeline";
 
 type PreviewStatus = "idle" | "running" | "ready" | "error";
 type ExportFormat = "jpeg" | "png";
-
-const toQuarterResolution = (size: number) => {
-  return Math.max(1, Math.floor(size / 4));
-};
 
 type DitherState = {
   previewStatus: PreviewStatus;
   previewCanvas: HTMLCanvasElement | null;
   sourceImage: ImageBitmap | null;
-  resolutionWidth: number;
-  resolutionHeight: number;
   renderTimeMs: number | null;
   setPreviewCanvas: (canvas: HTMLCanvasElement | null) => void;
   renderPreview: (canvas: HTMLCanvasElement) => Promise<void>;
@@ -26,16 +21,25 @@ export const useDitherStore = create<DitherState>((set, get) => ({
   previewStatus: "idle",
   previewCanvas: null,
   sourceImage: null,
-  resolutionWidth: 640,
-  resolutionHeight: 480,
   renderTimeMs: null,
   setPreviewCanvas: (canvas) => {
-    set({ previewCanvas: canvas });
+    set({previewCanvas: canvas});
   },
   renderPreview: async (canvas) => {
-    const { resolutionWidth, resolutionHeight, sourceImage } = get();
+    const {sourceImage} = get();
 
     if (!sourceImage) {
+      set({
+        previewStatus: "error",
+        renderTimeMs: null,
+      });
+
+      return;
+    }
+
+    const previewResolution = getPreviewResolution(sourceImage);
+
+    if (!previewResolution) {
       set({
         previewStatus: "error",
         renderTimeMs: null,
@@ -49,27 +53,18 @@ export const useDitherStore = create<DitherState>((set, get) => ({
       renderTimeMs: null,
     });
 
-    try {
-      const start = performance.now();
+    const start = performance.now();
+    await runPreviewComputePipeline(canvas, {
+      width: previewResolution.width,
+      height: previewResolution.height,
+      sourceImage,
+    });
+    const end = performance.now();
 
-      await runPreviewComputePipeline(canvas, {
-        width: resolutionWidth,
-        height: resolutionHeight,
-        sourceImage,
-      });
-
-      const end = performance.now();
-
-      set({
-        previewStatus: "ready",
-        renderTimeMs: end - start,
-      });
-    } catch {
-      set({
-        previewStatus: "error",
-        renderTimeMs: null,
-      });
-    }
+    set({
+      previewStatus: "ready",
+      renderTimeMs: end - start,
+    });
   },
   loadPreviewUrl: async (url, fileName) => {
     set({
@@ -77,25 +72,13 @@ export const useDitherStore = create<DitherState>((set, get) => ({
       renderTimeMs: null,
     });
 
-    try {
-      const response = await fetch(url);
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const file = new File([blob], fileName, {
+      type: blob.type || "image/jpeg",
+    });
 
-      if (!response.ok) {
-        throw new Error("Could not load the default preview image.");
-      }
-
-      const blob = await response.blob();
-      const file = new File([blob], fileName, {
-        type: blob.type || "image/jpeg",
-      });
-
-      await get().loadPreviewFile(file);
-    } catch {
-      set({
-        previewStatus: "error",
-        renderTimeMs: null,
-      });
-    }
+    await get().loadPreviewFile(file);
   },
   loadPreviewFile: async (file) => {
     if (!file.type.startsWith("image/")) {
@@ -112,39 +95,40 @@ export const useDitherStore = create<DitherState>((set, get) => ({
       renderTimeMs: null,
     });
 
-    try {
-      const nextSourceImage = await createImageBitmap(file);
-      const { previewCanvas, sourceImage, renderPreview } = get();
+    const nextSourceImage = await createImageBitmap(file);
+    const {previewCanvas, sourceImage, renderPreview} = get();
 
-      sourceImage?.close();
+    sourceImage?.close();
 
-      set({
-        sourceImage: nextSourceImage,
-        resolutionWidth: toQuarterResolution(nextSourceImage.width),
-        resolutionHeight: toQuarterResolution(nextSourceImage.height),
-      });
-
-      if (!previewCanvas) {
-        set({
-          previewStatus: "ready",
-          renderTimeMs: null,
-        });
-
-        return;
-      }
-
-      await renderPreview(previewCanvas);
-    } catch {
-      set({
-        previewStatus: "error",
-        renderTimeMs: null,
-      });
-    }
-  },
-  exportPreview: async (format) => {
-    const { previewCanvas, resolutionWidth, resolutionHeight } = get();
+    set({
+      sourceImage: nextSourceImage,
+    });
 
     if (!previewCanvas) {
+      set({
+        previewStatus: "ready",
+        renderTimeMs: null,
+      });
+
+      return;
+    }
+
+    await renderPreview(previewCanvas);
+  },
+  exportPreview: async (format) => {
+    const {previewCanvas, sourceImage} = get();
+
+    if (!previewCanvas || !sourceImage) {
+      set({
+        previewStatus: "error",
+      });
+
+      return;
+    }
+
+    const previewResolution = getPreviewResolution(sourceImage);
+
+    if (!previewResolution) {
       set({
         previewStatus: "error",
       });
@@ -154,7 +138,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
 
     const mimeType = format === "png" ? "image/png" : "image/jpeg";
     const extension = format === "png" ? "png" : "jpg";
-    const fileName = `ordered-dither-${resolutionWidth}x${resolutionHeight}.${extension}`;
+    const fileName = `ordered-dither-${previewResolution.width}x${previewResolution.height}.${extension}`;
 
     const blob = await new Promise<Blob | null>((resolve) => {
       previewCanvas.toBlob(resolve, mimeType);
