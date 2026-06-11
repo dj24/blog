@@ -5,31 +5,48 @@ type PreviewStatus = "idle" | "running" | "ready" | "error";
 
 type DitherState = {
   previewStatus: PreviewStatus;
+  previewError?: string;
+  resolutionWidth: number;
+  resolutionHeight: number;
   renderTimeMs: number | null;
   renderUvPreview: (canvas: HTMLCanvasElement) => Promise<void>;
 };
 
-export const useDitherStore = create<DitherState>((set) => ({
+export const useDitherStore = create<DitherState>((set, get) => ({
   previewStatus: "idle",
+  previewError: undefined,
+  resolutionWidth: 640,
+  resolutionHeight: 480,
   renderTimeMs: null,
   renderUvPreview: async (canvas) => {
     set({
       previewStatus: "running",
+      previewError: undefined,
       renderTimeMs: null,
     });
 
     try {
-      let start = performance.now();
-      await runUvComputePipeline(canvas);
-      let end = performance.now();
+      const start = performance.now();
+      const { resolutionWidth, resolutionHeight } = get();
+
+      await runUvComputePipeline(canvas, {
+        width: resolutionWidth,
+        height: resolutionHeight,
+      });
+
+      const end = performance.now();
+
       set({
         previewStatus: "ready",
-        renderTimeMs: start - end
+        previewError: undefined,
+        renderTimeMs: end - start,
       });
     } catch (error) {
       set({
         previewStatus: "error",
-        renderTimeMs: null
+        previewError:
+          error instanceof Error ? error.message : "Could not render the WebGPU preview.",
+        renderTimeMs: null,
       });
     }
   },

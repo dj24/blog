@@ -5,6 +5,8 @@ import { DownloadButton } from "./_components/download-button/download-button";
 import { Palette } from "./_components/palette/palette";
 import { Panel } from "./_components/panel/panel";
 import { RangeInput } from "./_components/range-input/range-input";
+import { RenderTime } from "./_components/render-time/render-time";
+import { Resolution } from "./_components/resolution/resolution";
 import { SquareCheckbox } from "./_components/square-checkbox/square-checkbox";
 import { UploadButton } from "./_components/upload-button/upload-button";
 import { UvPreviewCanvas } from "./_components/uv-preview-canvas/uv-preview-canvas";
@@ -19,7 +21,11 @@ const Page = () => {
   return (
     <main className={`${hankenGrotesk.variable} ${styles.page}`}>
       <section className={styles.leftPanel}>
-        <h2>preview</h2>
+        <div className={styles.previewStats}>
+          <Resolution />
+          <h2>preview</h2>
+          <RenderTime />
+        </div>
         <UvPreviewCanvas />
       </section>
       <section className={styles.rightPanel}>

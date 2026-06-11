@@ -37,15 +37,15 @@ const alignTo = (value: number, alignment: number) => {
   return Math.ceil(value / alignment) * alignment;
 };
 
-const getCanvasSize = (canvas: HTMLCanvasElement) => {
-  const pixelRatio = window.devicePixelRatio || 1;
-  const width = Math.max(1, Math.floor(canvas.clientWidth * pixelRatio));
-  const height = Math.max(1, Math.floor(canvas.clientHeight * pixelRatio));
-
-  return { width, height };
+type UvComputePipelineOptions = {
+  width: number;
+  height: number;
 };
 
-export const runUvComputePipeline = async (canvas: HTMLCanvasElement) => {
+export const runUvComputePipeline = async (
+  canvas: HTMLCanvasElement,
+  { width, height }: UvComputePipelineOptions,
+) => {
   const { makeShaderDataDefinitions, makeStructuredView } = await import("webgpu-utils");
   const device = await getGpuDevice();
   const context = canvas.getContext("webgpu");
@@ -54,7 +54,6 @@ export const runUvComputePipeline = async (canvas: HTMLCanvasElement) => {
     throw new Error("Could not create a WebGPU canvas context.");
   }
 
-  const { width, height } = getCanvasSize(canvas);
   const bytesPerRow = alignTo(width * 4, 256);
   const bufferSize = bytesPerRow * height;
 
