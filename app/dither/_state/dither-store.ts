@@ -36,8 +36,8 @@ export const useDitherStore = create<DitherState>((set, get) => ({
   renderTimeMs: null,
   contrast: 1,
   monochromaticPalette: [
-    [80, 50, 120],
-    [255, 140, 0],
+    [80, 60, 100],
+    [255, 140, 50],
   ],
   setPreviewCanvas: (canvas) => {
     set({previewCanvas: canvas});
