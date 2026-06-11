@@ -3,7 +3,6 @@ import { Bayer } from "./_components/bayer/bayer";
 import { Card } from "./_components/card/card";
 import { DownloadButton } from "./_components/download-button/download-button";
 import { Palette } from "./_components/palette/palette";
-import { Panel } from "./_components/panel/panel";
 import { RangeInput } from "./_components/range-input/range-input";
 import { RenderTime } from "./_components/render-time/render-time";
 import { Resolution } from "./_components/resolution/resolution";
@@ -29,106 +28,84 @@ const Page = () => {
         <UvPreviewCanvas />
       </section>
       <section className={styles.rightPanel}>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "var(--dither-spacing)",
-            flex: 1,
-          }}
-        >
-          <Panel>
-            <h2>upload</h2>
-            <div style={{ display: "flex", gap: "var(--dither-spacing)", flex: 1 }}>
-              <Card>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                >
-                  <p>select file</p>
-                  <UploadButton />
-                </div>
-              </Card>
-            </div>
-          </Panel>
-          <Panel>
-            <h2>settings</h2>
-            <div style={{ display: "flex", gap: "var(--dither-spacing)", flex: 1 }}>
-              <Card>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                >
-                  <p>monochromatic</p>
-                  <SquareCheckbox />
-                </div>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                >
-                  <p>contrast</p>
-                  <RangeInput id="contrast" name="contrast" min="0" max="11" />
-                </div>
-              </Card>
-              <Card>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                >
-                  <p>polychromatic</p>
-                  <SquareCheckbox />
-                </div>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                >
-                  <p>palette</p>
-                  <Palette
-                    colors={[
-                      "rgb(10,10,10)",
-                      "rgb(80,80,80)",
-                      "rgb(160,160,160)",
-                      "rgb(220,220,220)",
-                    ]}
-                  />
-                </div>
-              </Card>
-            </div>
-          </Panel>
-          <Panel>
-            <h2>export</h2>
-            <div style={{ display: "flex", gap: "var(--dither-spacing)", flex: 1 }}>
-              <Card>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                >
-                  <p>jpeg</p>
-                  <DownloadButton />
-                </div>
-              </Card>
-              <Card>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                >
-                  <p>png</p>
-                  <DownloadButton />
-                </div>
-              </Card>
-            </div>
-          </Panel>
+        <h1 className={styles.pageTitle}>ordered dithering</h1>
+        <div className={`${styles.section} ${styles.uploadSection}`}>
+          <h2 className={styles.sectionTitle}>upload</h2>
+          <div className={styles.uploadCard}>
+            <Card>
+              <div className={styles.cardRow}>
+                <p>select file</p>
+                <UploadButton />
+              </div>
+            </Card>
+          </div>
         </div>
-        <div
-          style={{
-            display: "flex",
-            gap: "var(--dither-spacing)",
-            flexDirection: "column",
-            justifyContent: "end",
-          }}
-        >
-          <div>
+        <div className={styles.bayerGraphic}>
+          <div className={styles.bayerStack}>
             <Bayer tlFilled />
             <Bayer tlFilled brFilled />
             <Bayer tlFilled brFilled trFilled />
             <Bayer trFilled blFilled brFilled tlFilled />
           </div>
-          <h1>
-            ordered <span>dithering</span>
-          </h1>
+        </div>
+        <div className={`${styles.section} ${styles.settingsSection}`}>
+          <h2 className={styles.sectionTitle}>settings</h2>
+          <div className={styles.monoCard}>
+            <Card>
+              <div className={styles.cardRow}>
+                <p>monochromatic</p>
+                <SquareCheckbox />
+              </div>
+              <div className={styles.cardRow}>
+                <p>contrast</p>
+                <RangeInput id="contrast" name="contrast" min="0" max="11" />
+              </div>
+            </Card>
+          </div>
+          <div className={styles.polyCard}>
+            <Card>
+              <div className={styles.cardRow}>
+                <p>polychromatic</p>
+                <SquareCheckbox />
+              </div>
+              <div className={styles.cardRow}>
+                <p>palette</p>
+                <Palette
+                  colors={[
+                    "rgb(10,10,10)",
+                    "rgb(80,80,80)",
+                    "rgb(160,160,160)",
+                    "rgb(220,220,220)",
+                  ]}
+                />
+              </div>
+            </Card>
+          </div>
+        </div>
+        <div aria-hidden className={`${styles.titleWord} ${styles.ditheringWord}`}>
+          dithering
+        </div>
+        <div className={`${styles.section} ${styles.exportSection}`}>
+          <h2 className={styles.sectionTitle}>export</h2>
+          <div className={styles.jpegCard}>
+            <Card>
+              <div className={styles.cardRow}>
+                <p>jpeg</p>
+                <DownloadButton />
+              </div>
+            </Card>
+          </div>
+          <div className={styles.pngCard}>
+            <Card>
+              <div className={styles.cardRow}>
+                <p>png</p>
+                <DownloadButton />
+              </div>
+            </Card>
+          </div>
+        </div>
+        <div aria-hidden className={`${styles.titleWord} ${styles.orderedWord}`}>
+          ordered
         </div>
       </section>
     </main>
