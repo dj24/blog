@@ -1,6 +1,6 @@
 import styles from "./action-button.module.css";
 
-const ActionButton = ({
+export const ActionButton = ({
   "aria-label": ariaLabel,
   children,
 }: {
@@ -13,5 +13,3 @@ const ActionButton = ({
     </button>
   );
 };
-
-export default ActionButton;

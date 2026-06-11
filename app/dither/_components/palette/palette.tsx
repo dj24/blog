@@ -1,6 +1,6 @@
 import styles from "./palette.module.css";
 
-const Palette = ({ colors }: { colors: string[] }) => {
+export const Palette = ({ colors }: { colors: string[] }) => {
   return (
     <div className={styles.palette}>
       {colors.map((color, index) => (
@@ -9,5 +9,3 @@ const Palette = ({ colors }: { colors: string[] }) => {
     </div>
   );
 };
-
-export default Palette;

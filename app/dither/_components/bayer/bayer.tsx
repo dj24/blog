@@ -4,7 +4,7 @@ const BayerCell = ({ filled }: { filled?: boolean }) => {
   return <div className={filled ? `${styles.cell} ${styles.filled}` : styles.cell}></div>;
 };
 
-const Bayer = ({
+export const Bayer = ({
   trFilled,
   tlFilled,
   blFilled,
@@ -22,5 +22,3 @@ const Bayer = ({
     <BayerCell filled={brFilled} />
   </div>
 );
-
-export default Bayer;

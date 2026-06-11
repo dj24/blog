@@ -1,12 +1,13 @@
 import { Hanken_Grotesk } from "next/font/google";
-import Bayer from "./_components/bayer";
-import Card from "./_components/card";
-import DownloadButton from "./_components/download-button";
-import Palette from "./_components/palette";
-import Panel from "./_components/panel";
-import RangeInput from "./_components/range-input";
-import SquareCheckbox from "./_components/square-checkbox";
-import UploadButton from "./_components/upload-button";
+import { Bayer } from "./_components/bayer/bayer";
+import { Card } from "./_components/card/card";
+import { DownloadButton } from "./_components/download-button/download-button";
+import { Palette } from "./_components/palette/palette";
+import { Panel } from "./_components/panel/panel";
+import { RangeInput } from "./_components/range-input/range-input";
+import { SquareCheckbox } from "./_components/square-checkbox/square-checkbox";
+import { UploadButton } from "./_components/upload-button/upload-button";
+import { UvPreviewCanvas } from "./_components/uv-preview-canvas/uv-preview-canvas";
 import styles from "./page.module.css";
 
 const hankenGrotesk = Hanken_Grotesk({
@@ -19,6 +20,7 @@ const Page = () => {
     <main className={`${hankenGrotesk.variable} ${styles.page}`}>
       <section className={styles.leftPanel}>
         <h2>preview</h2>
+        <UvPreviewCanvas />
       </section>
       <section className={styles.rightPanel}>
         <div
