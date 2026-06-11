@@ -42,7 +42,6 @@ const Page = () => {
           </div>
         </div>
         <div className={styles.bayerGraphic}>
-          <Arc />
           <div className={styles.bayerStack}>
             <Bayer tlFilled />
             <Bayer tlFilled brFilled />
@@ -108,6 +107,7 @@ const Page = () => {
         </div>
         <div aria-hidden className={`${styles.titleWord} ${styles.orderedWord}`}>
           ordered
+          <Arc />
         </div>
       </section>
     </main>
