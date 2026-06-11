@@ -1,0 +1,14 @@
+.arc {
+  width: 12vmin;
+  min-width: 64px;
+  height: auto;
+  display: block;
+  border: 1px solid red;
+}
+
+.path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: square;
+}

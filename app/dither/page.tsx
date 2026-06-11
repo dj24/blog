@@ -1,3 +1,4 @@
+import { Arc } from "./_components/arc/arc";
 import { Hanken_Grotesk } from "next/font/google";
 import { Bayer } from "./_components/bayer/bayer";
 import { Card } from "./_components/card/card";
@@ -41,6 +42,7 @@ const Page = () => {
           </div>
         </div>
         <div className={styles.bayerGraphic}>
+          <Arc />
           <div className={styles.bayerStack}>
             <Bayer tlFilled />
             <Bayer tlFilled brFilled />
