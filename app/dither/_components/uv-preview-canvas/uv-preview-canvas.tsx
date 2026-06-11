@@ -9,6 +9,7 @@ export const UvPreviewCanvas = () => {
   const renderUvPreview = useDitherStore((state) => state.renderUvPreview);
   const previewStatus = useDitherStore((state) => state.previewStatus);
   const previewError = useDitherStore((state) => state.previewError);
+  const setPreviewCanvas = useDitherStore((state) => state.setPreviewCanvas);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -17,8 +18,13 @@ export const UvPreviewCanvas = () => {
       return;
     }
 
+    setPreviewCanvas(canvas);
     void renderUvPreview(canvas);
-  }, [renderUvPreview]);
+
+    return () => {
+      setPreviewCanvas(null);
+    };
+  }, [renderUvPreview, setPreviewCanvas]);
 
   return (
     <div className={styles.preview}>

@@ -92,7 +92,7 @@ const Page = () => {
             <Card>
               <div className={styles.cardRow}>
                 <p>jpeg</p>
-                <DownloadButton />
+                <DownloadButton format="jpeg" />
               </div>
             </Card>
           </div>
@@ -100,7 +100,7 @@ const Page = () => {
             <Card>
               <div className={styles.cardRow}>
                 <p>png</p>
-                <DownloadButton />
+                <DownloadButton format="png" />
               </div>
             </Card>
           </div>
