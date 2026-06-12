@@ -18,6 +18,7 @@ struct PreviewUniforms {
   sourceWidth: u32,
   sourceHeight: u32,
   bytesPerRow: u32,
+  brightness: f32,
   contrast: f32,
   monochromaticDarkColor: vec4f,
   monochromaticLightColor: vec4f,
@@ -46,6 +47,10 @@ fn packColor(color: vec4f) -> u32 {
 
 fn luminance(color: vec3f) -> f32 {
   return dot(color, vec3f(0.2126, 0.7152, 0.0722));
+}
+
+fn applyBrightness(value: f32) -> f32 {
+  return clamp(value + previewUniforms.brightness, 0.0, 1.0);
 }
 
 fn applyContrast(value: f32) -> f32 {
@@ -91,7 +96,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 
   let color = averageSourceRegion(id.xy);
   let threshold = bayerThreshold(id.xy);
-  let contrastedLuminance = applyContrast(luminance(color.rgb));
+  let adjustedLuminance = applyBrightness(luminance(color.rgb));
+  let contrastedLuminance = applyContrast(adjustedLuminance);
   let ditheredColor = select(
     previewUniforms.monochromaticDarkColor,
     previewUniforms.monochromaticLightColor,
@@ -110,7 +116,7 @@ export const runMonochromaticPreviewComputePipeline = async (
   canvas: HTMLCanvasElement,
   options: MonochromaticPreviewComputePipelineOptions,
 ) => {
-  const { width, height, sourceImage, contrast, palette } = options;
+  const { width, height, sourceImage, brightness, contrast, palette } = options;
 
   if (!sourceImage) {
     throw new Error("No preview image is loaded.");
@@ -149,6 +155,7 @@ export const runMonochromaticPreviewComputePipeline = async (
     sourceWidth: sourceImage.width,
     sourceHeight: sourceImage.height,
     bytesPerRow,
+    brightness,
     contrast,
     monochromaticDarkColor: toShaderColor(palette[0]),
     monochromaticLightColor: toShaderColor(palette[1]),

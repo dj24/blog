@@ -8,12 +8,14 @@ export type PreviewPaletteColor = readonly [red: number, green: number, blue: nu
 
 export type MonochromaticPreviewComputePipelineOptions = PreviewComputePipelineBaseOptions & {
   type: "monochromatic";
+  brightness: number;
   contrast: number;
   palette: readonly [PreviewPaletteColor, PreviewPaletteColor];
 };
 
 export type PolychromaticPreviewComputePipelineOptions = PreviewComputePipelineBaseOptions & {
   type: "polychromatic";
+  brightness: number;
   contrast: number;
   palette: readonly [
     PreviewPaletteColor,

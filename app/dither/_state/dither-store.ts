@@ -1,7 +1,8 @@
 import { getSwatches, type SwatchMap } from "colorthief";
+import { match } from "ts-pattern";
 import { create } from "zustand";
 import { getPreviewResolution } from "../_lib/get-preview-resolution";
-import type { PaletteColor } from "../_lib/palette-color";
+import { saturatePaletteColor, type PaletteColor } from "../_lib/palette-color";
 import { runPreviewComputePipeline } from "../_lib/run-preview-compute-pipeline";
 
 type PreviewStatus = "idle" | "running" | "ready" | "error";
@@ -11,12 +12,14 @@ type PolychromaticPalette = readonly [PaletteColor, PaletteColor, PaletteColor, 
 
 type MonochromaticSettings = {
   mode: "monochromatic";
+  brightness: number;
   contrast: number;
   palette: MonochromaticPalette;
 };
 
 type PolychromaticSettings = {
   mode: "polychromatic";
+  brightness: number;
   contrast: number;
   palette: PolychromaticPalette;
 };
@@ -37,6 +40,7 @@ type DitherState = {
   settings: DitherSettings;
   settingsByMode: DitherSettingsByMode;
   setPreviewCanvas: (canvas: HTMLCanvasElement | null) => void;
+  setBrightness: (brightness: number) => Promise<void>;
   setMode: (mode: DitherMode) => Promise<void>;
   setContrast: (contrast: number) => Promise<void>;
   setPaletteColor: (index: 0 | 1 | 2 | 3, color: PaletteColor) => Promise<void>;
@@ -48,6 +52,7 @@ type DitherState = {
 
 const monochromaticDefaultSettings: MonochromaticSettings = {
   mode: "monochromatic",
+  brightness: 0,
   contrast: 1,
   palette: [
     [80, 60, 100],
@@ -57,6 +62,7 @@ const monochromaticDefaultSettings: MonochromaticSettings = {
 
 const polychromaticDefaultSettings: PolychromaticSettings = {
   mode: "polychromatic",
+  brightness: 0,
   contrast: 1,
   palette: [
     [25, 20, 35],
@@ -70,6 +76,8 @@ const defaultSettingsByMode: DitherSettingsByMode = {
   monochromatic: monochromaticDefaultSettings,
   polychromatic: polychromaticDefaultSettings,
 };
+
+const extractedPaletteSaturationBoost = 50;
 
 const getSettingsForMode = (settingsByMode: DitherSettingsByMode, mode: DitherMode) => {
   return settingsByMode[mode];
@@ -85,7 +93,7 @@ const getPaletteColorFromSwatch = (
 
   const [red, green, blue] = swatch.color.array();
 
-  return [red, green, blue];
+  return saturatePaletteColor([red, green, blue], extractedPaletteSaturationBoost);
 };
 
 const getPolychromaticPaletteFromSwatches = async (
@@ -112,6 +120,27 @@ export const useDitherStore = create<DitherState>((set, get) => ({
   settingsByMode: defaultSettingsByMode,
   setPreviewCanvas: (canvas) => {
     set({ previewCanvas: canvas });
+  },
+  setBrightness: async (brightness) => {
+    const { mode, previewCanvas, settingsByMode, sourceImage } = get();
+    const nextSettings = {
+      ...getSettingsForMode(settingsByMode, mode),
+      brightness,
+    };
+
+    set({
+      settings: nextSettings,
+      settingsByMode: {
+        ...settingsByMode,
+        [mode]: nextSettings,
+      },
+    });
+
+    if (!previewCanvas || !sourceImage) {
+      return;
+    }
+
+    await get().renderPreview(previewCanvas);
   },
   setMode: async (mode) => {
     const { previewCanvas, settingsByMode, sourceImage } = get();
@@ -154,6 +183,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
   },
   setPaletteColor: async (index, color) => {
     const { mode, previewCanvas, settingsByMode, sourceImage } = get();
+    const polychromaticPalette = settingsByMode.polychromatic.palette;
 
     if (mode === "monochromatic" && index > 1) {
       return;
@@ -170,14 +200,32 @@ export const useDitherStore = create<DitherState>((set, get) => ({
           } satisfies MonochromaticSettings)
         : ({
             ...settingsByMode.polychromatic,
-            palette:
-              index === 0
-                ? [color, settingsByMode.polychromatic.palette[1], settingsByMode.polychromatic.palette[2], settingsByMode.polychromatic.palette[3]]
-                : index === 1
-                  ? [settingsByMode.polychromatic.palette[0], color, settingsByMode.polychromatic.palette[2], settingsByMode.polychromatic.palette[3]]
-                  : index === 2
-                    ? [settingsByMode.polychromatic.palette[0], settingsByMode.polychromatic.palette[1], color, settingsByMode.polychromatic.palette[3]]
-                    : [settingsByMode.polychromatic.palette[0], settingsByMode.polychromatic.palette[1], settingsByMode.polychromatic.palette[2], color],
+            palette: match(index)
+              .with(0, (): PolychromaticPalette => [
+                color,
+                polychromaticPalette[1],
+                polychromaticPalette[2],
+                polychromaticPalette[3],
+              ])
+              .with(1, (): PolychromaticPalette => [
+                polychromaticPalette[0],
+                color,
+                polychromaticPalette[2],
+                polychromaticPalette[3],
+              ])
+              .with(2, (): PolychromaticPalette => [
+                polychromaticPalette[0],
+                polychromaticPalette[1],
+                color,
+                polychromaticPalette[3],
+              ])
+              .with(3, (): PolychromaticPalette => [
+                polychromaticPalette[0],
+                polychromaticPalette[1],
+                polychromaticPalette[2],
+                color,
+              ])
+              .exhaustive(),
           } satisfies PolychromaticSettings);
 
     set({
@@ -228,6 +276,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
             width: previewResolution.width,
             height: previewResolution.height,
             sourceImage,
+            brightness: settings.brightness,
             contrast: settings.contrast,
             palette: settings.palette,
           }
@@ -236,6 +285,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
             width: previewResolution.width,
             height: previewResolution.height,
             sourceImage,
+            brightness: settings.brightness,
             contrast: settings.contrast,
             palette: settings.palette,
           },

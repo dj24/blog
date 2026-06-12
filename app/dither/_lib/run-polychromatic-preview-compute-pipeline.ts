@@ -18,6 +18,7 @@ struct PreviewUniforms {
   sourceWidth: u32,
   sourceHeight: u32,
   bytesPerRow: u32,
+  brightness: f32,
   contrast: f32,
   paletteColor0: vec4f,
   paletteColor1: vec4f,
@@ -44,6 +45,14 @@ fn packColor(color: vec4f) -> u32 {
   let rgba = vec4u(round(clamp(color, vec4f(0.0), vec4f(1.0)) * 255.0));
 
   return rgba.x | (rgba.y << 8u) | (rgba.z << 16u) | (rgba.w << 24u);
+}
+
+fn applyBrightness(color: vec3f) -> vec3f {
+  return clamp(
+    color + vec3f(previewUniforms.brightness),
+    vec3f(0.0),
+    vec3f(1.0),
+  );
 }
 
 fn applyContrast(color: vec3f) -> vec3f {
@@ -109,7 +118,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   }
 
   let sourceColor = averageSourceRegion(id.xy);
-  let contrastedColor = applyContrast(sourceColor.rgb);
+  let brightenedColor = applyBrightness(sourceColor.rgb);
+  let contrastedColor = applyContrast(brightenedColor);
   var nearestIndex = 0u;
   var secondNearestIndex = 1u;
   var nearestDistance = 1e9;
@@ -151,7 +161,7 @@ export const runPolychromaticPreviewComputePipeline = async (
   canvas: HTMLCanvasElement,
   options: PolychromaticPreviewComputePipelineOptions,
 ) => {
-  const { width, height, sourceImage, contrast, palette } = options;
+  const { width, height, sourceImage, brightness, contrast, palette } = options;
 
   if (!sourceImage) {
     throw new Error("No preview image is loaded.");
@@ -190,6 +200,7 @@ export const runPolychromaticPreviewComputePipeline = async (
     sourceWidth: sourceImage.width,
     sourceHeight: sourceImage.height,
     bytesPerRow,
+    brightness,
     contrast,
     paletteColor0: toShaderColor(palette[0]),
     paletteColor1: toShaderColor(palette[1]),

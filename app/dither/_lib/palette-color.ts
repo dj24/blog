@@ -1,3 +1,5 @@
+import tinycolor from "tinycolor2";
+
 export type PaletteColor = readonly [red: number, green: number, blue: number];
 
 const toHexChannel = (value: number) => {
@@ -14,4 +16,13 @@ export const toRgbColor = (value: string): PaletteColor => {
     Number.parseInt(value.slice(3, 5), 16),
     Number.parseInt(value.slice(5, 7), 16),
   ];
+};
+
+export const saturatePaletteColor = (
+  [red, green, blue]: PaletteColor,
+  amount: number,
+): PaletteColor => {
+  const saturatedColor = tinycolor({ r: red, g: green, b: blue }).saturate(amount).toRgb();
+
+  return [saturatedColor.r, saturatedColor.g, saturatedColor.b];
 };

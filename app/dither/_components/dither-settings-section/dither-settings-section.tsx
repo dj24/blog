@@ -8,8 +8,13 @@ import { PolychromaticPaletteControl } from "../polychromatic-palette-control/po
 import { RangeInput } from "../range-input/range-input";
 import styles from "../../page.module.css";
 
+const CONTRAST_SCALE = 0.5;
+const BRIGHTNESS_SCALE = 0.1;
+
 export const DitherSettingsSection = () => {
-  const mode = useDitherStore((state) => state.settings.mode);
+  const { brightness, contrast, mode } = useDitherStore((state) => state.settings);
+  const setBrightness = useDitherStore((state) => state.setBrightness);
+  const setContrast = useDitherStore((state) => state.setContrast);
 
   return (
     <div className={`${styles.section} ${styles.settingsSection}`}>
@@ -29,6 +34,25 @@ export const DitherSettingsSection = () => {
                   name="contrast-monochromatic"
                   min="0"
                   max="11"
+                  onValueChange={(value) => {
+                    void setContrast(value);
+                  }}
+                  scale={CONTRAST_SCALE}
+                  value={contrast}
+                />
+              </div>
+              <div className={styles.cardRow}>
+                <p>brightness</p>
+                <RangeInput
+                  id="brightness-monochromatic"
+                  name="brightness-monochromatic"
+                  min="-10"
+                  max="10"
+                  onValueChange={(value) => {
+                    void setBrightness(value);
+                  }}
+                  scale={BRIGHTNESS_SCALE}
+                  value={brightness}
                 />
               </div>
               <div className={styles.cardRow}>
@@ -54,6 +78,25 @@ export const DitherSettingsSection = () => {
                   name="contrast-polychromatic"
                   min="0"
                   max="11"
+                  onValueChange={(value) => {
+                    void setContrast(value);
+                  }}
+                  scale={CONTRAST_SCALE}
+                  value={contrast}
+                />
+              </div>
+              <div className={styles.cardRow}>
+                <p>brightness</p>
+                <RangeInput
+                  id="brightness-polychromatic"
+                  name="brightness-polychromatic"
+                  min="-10"
+                  max="10"
+                  onValueChange={(value) => {
+                    void setBrightness(value);
+                  }}
+                  scale={BRIGHTNESS_SCALE}
+                  value={brightness}
                 />
               </div>
               <div className={styles.cardRow}>

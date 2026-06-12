@@ -16,6 +16,8 @@
     "next": "16.2.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "tinycolor2": "^1.6.0",
+    "ts-pattern": "^5.9.0",
     "webgpu-utils": "^2.1.1",
     "zustand": "^5.0.14"
   },
@@ -23,6 +25,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/tinycolor2": "^1.4.6",
     "@webgpu/types": "^0.1.70",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
