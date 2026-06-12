@@ -1,12 +1,12 @@
 "use client";
 
-import {useDitherStore} from "../../_state/dither-store";
+import { useDitherStore } from "../../_state/dither-store";
 import styles from "./range-input.module.css";
 
 const CONTRAST_SCALE = 0.5;
 
 export const RangeInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => {
-  const contrast = useDitherStore((state) => state.contrast);
+  const contrast = useDitherStore((state) => state.settings.contrast);
   const setContrast = useDitherStore((state) => state.setContrast);
 
   return (

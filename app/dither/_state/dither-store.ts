@@ -1,32 +1,63 @@
-import {create} from "zustand";
-import {getPreviewResolution} from "../_lib/get-preview-resolution";
-import {runPreviewComputePipeline} from "../_lib/run-preview-compute-pipeline";
+import { create } from "zustand";
+import { getPreviewResolution } from "../_lib/get-preview-resolution";
+import type { PaletteColor } from "../_lib/palette-color";
+import { runPreviewComputePipeline } from "../_lib/run-preview-compute-pipeline";
 
 type PreviewStatus = "idle" | "running" | "ready" | "error";
 type ExportFormat = "jpeg" | "png";
-type MonochromaticPaletteColor = readonly [red: number, green: number, blue: number];
-type MonochromaticPalette = readonly [
-  MonochromaticPaletteColor,
-  MonochromaticPaletteColor,
-];
+type MonochromaticPalette = readonly [PaletteColor, PaletteColor];
+type PolychromaticPalette = readonly [PaletteColor, PaletteColor, PaletteColor, PaletteColor];
+
+type MonochromaticSettings = {
+  mode: "monochromatic";
+  contrast: number;
+  palette: MonochromaticPalette;
+};
+
+type PolychromaticSettings = {
+  mode: "polychromatic";
+  contrast: number;
+  palette: PolychromaticPalette;
+};
+
+export type DitherSettings = MonochromaticSettings | PolychromaticSettings;
+export type DitherMode = DitherSettings["mode"];
 
 type DitherState = {
   previewStatus: PreviewStatus;
   previewCanvas: HTMLCanvasElement | null;
   sourceImage: ImageBitmap | null;
   renderTimeMs: number | null;
-  contrast: number;
-  monochromaticPalette: MonochromaticPalette;
+  settings: DitherSettings;
   setPreviewCanvas: (canvas: HTMLCanvasElement | null) => void;
+  setMode: (mode: DitherMode) => Promise<void>;
   setContrast: (contrast: number) => Promise<void>;
-  setMonochromaticPaletteColor: (
-    index: 0 | 1,
-    color: MonochromaticPaletteColor,
-  ) => Promise<void>;
+  setMonochromaticPaletteColor: (index: 0 | 1, color: PaletteColor) => Promise<void>;
+  setPolychromaticPaletteColor: (index: 0 | 1 | 2 | 3, color: PaletteColor) => Promise<void>;
   renderPreview: (canvas: HTMLCanvasElement) => Promise<void>;
   loadPreviewFile: (file: File) => Promise<void>;
   loadPreviewUrl: (url: string, fileName: string) => Promise<void>;
   exportPreview: (format: ExportFormat) => Promise<void>;
+};
+
+const monochromaticDefaultSettings: MonochromaticSettings = {
+  mode: "monochromatic",
+  contrast: 1,
+  palette: [
+    [80, 60, 100],
+    [255, 140, 50],
+  ],
+};
+
+const polychromaticDefaultSettings: PolychromaticSettings = {
+  mode: "polychromatic",
+  contrast: 1,
+  palette: [
+    [25, 20, 35],
+    [80, 60, 100],
+    [180, 110, 70],
+    [255, 220, 180],
+  ],
 };
 
 export const useDitherStore = create<DitherState>((set, get) => ({
@@ -34,18 +65,45 @@ export const useDitherStore = create<DitherState>((set, get) => ({
   previewCanvas: null,
   sourceImage: null,
   renderTimeMs: null,
-  contrast: 1,
-  monochromaticPalette: [
-    [80, 60, 100],
-    [255, 140, 50],
-  ],
+  settings: monochromaticDefaultSettings,
   setPreviewCanvas: (canvas) => {
-    set({previewCanvas: canvas});
+    set({ previewCanvas: canvas });
+  },
+  setMode: async (mode) => {
+    const { previewCanvas, settings, sourceImage } = get();
+
+    if (settings.mode === mode) {
+      return;
+    }
+
+    set({
+      settings:
+        mode === "monochromatic"
+          ? {
+              ...monochromaticDefaultSettings,
+              contrast: settings.contrast,
+            }
+          : {
+              ...polychromaticDefaultSettings,
+              contrast: settings.contrast,
+            },
+    });
+
+    if (!previewCanvas || !sourceImage) {
+      return;
+    }
+
+    await get().renderPreview(previewCanvas);
   },
   setContrast: async (contrast) => {
-    const {previewCanvas, sourceImage} = get();
+    const { previewCanvas, settings, sourceImage } = get();
 
-    set({contrast});
+    set({
+      settings: {
+        ...settings,
+        contrast,
+      },
+    });
 
     if (!previewCanvas || !sourceImage) {
       return;
@@ -54,14 +112,45 @@ export const useDitherStore = create<DitherState>((set, get) => ({
     await get().renderPreview(previewCanvas);
   },
   setMonochromaticPaletteColor: async (index, color) => {
-    const {previewCanvas, sourceImage} = get();
+    const { previewCanvas, settings, sourceImage } = get();
 
-    set((state) => ({
-      monochromaticPalette:
-        index === 0
-          ? [color, state.monochromaticPalette[1]]
-          : [state.monochromaticPalette[0], color],
-    }));
+    if (settings.mode !== "monochromatic") {
+      return;
+    }
+
+    set({
+      settings: {
+        ...settings,
+        palette: index === 0 ? [color, settings.palette[1]] : [settings.palette[0], color],
+      },
+    });
+
+    if (!previewCanvas || !sourceImage) {
+      return;
+    }
+
+    await get().renderPreview(previewCanvas);
+  },
+  setPolychromaticPaletteColor: async (index, color) => {
+    const { previewCanvas, settings, sourceImage } = get();
+
+    if (settings.mode !== "polychromatic") {
+      return;
+    }
+
+    set({
+      settings: {
+        ...settings,
+        palette:
+          index === 0
+            ? [color, settings.palette[1], settings.palette[2], settings.palette[3]]
+            : index === 1
+              ? [settings.palette[0], color, settings.palette[2], settings.palette[3]]
+              : index === 2
+                ? [settings.palette[0], settings.palette[1], color, settings.palette[3]]
+                : [settings.palette[0], settings.palette[1], settings.palette[2], color],
+      },
+    });
 
     if (!previewCanvas || !sourceImage) {
       return;
@@ -70,7 +159,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
     await get().renderPreview(previewCanvas);
   },
   renderPreview: async (canvas) => {
-    const {contrast, monochromaticPalette, sourceImage} = get();
+    const { settings, sourceImage } = get();
 
     if (!sourceImage) {
       set({
@@ -95,14 +184,26 @@ export const useDitherStore = create<DitherState>((set, get) => ({
     });
 
     const start = performance.now();
-    await runPreviewComputePipeline(canvas, {
-      type: "monochromatic",
-      width: previewResolution.width,
-      height: previewResolution.height,
-      sourceImage,
-      contrast,
-      palette: monochromaticPalette,
-    });
+    await runPreviewComputePipeline(
+      canvas,
+      settings.mode === "monochromatic"
+        ? {
+            type: "monochromatic",
+            width: previewResolution.width,
+            height: previewResolution.height,
+            sourceImage,
+            contrast: settings.contrast,
+            palette: settings.palette,
+          }
+        : {
+            type: "polychromatic",
+            width: previewResolution.width,
+            height: previewResolution.height,
+            sourceImage,
+            contrast: settings.contrast,
+            palette: settings.palette,
+          },
+    );
     const end = performance.now();
 
     set({
@@ -137,7 +238,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
     });
 
     const nextSourceImage = await createImageBitmap(file);
-    const {previewCanvas, sourceImage, renderPreview} = get();
+    const { previewCanvas, sourceImage, renderPreview } = get();
 
     sourceImage?.close();
 
@@ -156,7 +257,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
     await renderPreview(previewCanvas);
   },
   exportPreview: async (format) => {
-    const {previewCanvas, sourceImage} = get();
+    const { previewCanvas, sourceImage } = get();
 
     if (!previewCanvas || !sourceImage) {
       set({

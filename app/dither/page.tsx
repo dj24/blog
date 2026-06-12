@@ -3,14 +3,11 @@ import { Hanken_Grotesk } from "next/font/google";
 import pearlEarring from "../pearl-earring.jpg";
 import { Bayer } from "./_components/bayer/bayer";
 import { Card } from "./_components/card/card";
+import { DitherSettingsSection } from "./_components/dither-settings-section/dither-settings-section";
 import { DownloadButton } from "./_components/download-button/download-button";
-import { MonochromaticPaletteControl } from "./_components/monochromatic-palette-control/monochromatic-palette-control";
-import { Palette } from "./_components/palette/palette";
 import { PreviewCanvas } from "./_components/preview-canvas/preview-canvas";
-import { RangeInput } from "./_components/range-input/range-input";
 import { RenderTime } from "./_components/render-time/render-time";
 import { Resolution } from "./_components/resolution/resolution";
-import { SquareCheckbox } from "./_components/square-checkbox/square-checkbox";
 import { UploadButton } from "./_components/upload-button/upload-button";
 import styles from "./page.module.css";
 
@@ -51,44 +48,7 @@ const Page = () => {
             <Bayer trFilled blFilled brFilled tlFilled />
           </div>
         </div>
-        <div className={`${styles.section} ${styles.settingsSection}`}>
-          <h2 className={styles.sectionTitle}>settings</h2>
-          <div className={styles.monoCard}>
-            <Card>
-              <div className={styles.cardRow}>
-                <p>monochromatic</p>
-                <SquareCheckbox />
-              </div>
-              <div className={styles.cardRow}>
-                <p>contrast</p>
-                <RangeInput id="contrast" name="contrast" min="0" max="11" />
-              </div>
-              <div className={styles.cardRow}>
-                <p>palette</p>
-                <MonochromaticPaletteControl />
-              </div>
-            </Card>
-          </div>
-          <div className={styles.polyCard}>
-            <Card>
-              <div className={styles.cardRow}>
-                <p>polychromatic</p>
-                <SquareCheckbox />
-              </div>
-              <div className={styles.cardRow}>
-                <p>palette</p>
-                <Palette
-                  colors={[
-                    "rgb(10,10,10)",
-                    "rgb(80,80,80)",
-                    "rgb(160,160,160)",
-                    "rgb(220,220,220)",
-                  ]}
-                />
-              </div>
-            </Card>
-          </div>
-        </div>
+        <DitherSettingsSection />
         <div aria-hidden className={`${styles.titleWord} ${styles.ditheringWord}`}>
           dithering
         </div>

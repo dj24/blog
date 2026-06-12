@@ -1,5 +1,13 @@
 import styles from "./square-checkbox.module.css";
 
-export const SquareCheckbox = () => {
-  return <input aria-label="Select card" className={styles.squareCheckbox} type="checkbox" />;
+type SquareCheckboxProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">;
+
+export const SquareCheckbox = ({ className, ...props }: SquareCheckboxProps) => {
+  return (
+    <input
+      {...props}
+      className={[styles.squareCheckbox, className].filter(Boolean).join(" ")}
+      type="checkbox"
+    />
+  );
 };
