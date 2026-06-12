@@ -25,9 +25,7 @@ const paletteControls = [
 
 export const PolychromaticPaletteControl = () => {
   const settings = useDitherStore((state) => state.settings);
-  const setPolychromaticPaletteColor = useDitherStore(
-    (state) => state.setPolychromaticPaletteColor,
-  );
+  const setPaletteColor = useDitherStore((state) => state.setPaletteColor);
 
   if (settings.mode !== "polychromatic") {
     return null;
@@ -42,7 +40,7 @@ export const PolychromaticPaletteControl = () => {
             aria-label={label}
             className={styles.colorInput}
             onChange={(event) => {
-              void setPolychromaticPaletteColor(index, toRgbColor(event.currentTarget.value));
+              void setPaletteColor(index, toRgbColor(event.currentTarget.value));
             }}
             type="color"
             value={toHexColor(settings.palette[index])}

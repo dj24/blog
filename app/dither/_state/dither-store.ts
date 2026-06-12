@@ -1,3 +1,4 @@
+import { getSwatches, type SwatchMap } from "colorthief";
 import { create } from "zustand";
 import { getPreviewResolution } from "../_lib/get-preview-resolution";
 import type { PaletteColor } from "../_lib/palette-color";
@@ -22,18 +23,23 @@ type PolychromaticSettings = {
 
 export type DitherSettings = MonochromaticSettings | PolychromaticSettings;
 export type DitherMode = DitherSettings["mode"];
+type DitherSettingsByMode = {
+  monochromatic: MonochromaticSettings;
+  polychromatic: PolychromaticSettings;
+};
 
 type DitherState = {
+  mode: DitherMode;
   previewStatus: PreviewStatus;
   previewCanvas: HTMLCanvasElement | null;
   sourceImage: ImageBitmap | null;
   renderTimeMs: number | null;
   settings: DitherSettings;
+  settingsByMode: DitherSettingsByMode;
   setPreviewCanvas: (canvas: HTMLCanvasElement | null) => void;
   setMode: (mode: DitherMode) => Promise<void>;
   setContrast: (contrast: number) => Promise<void>;
-  setMonochromaticPaletteColor: (index: 0 | 1, color: PaletteColor) => Promise<void>;
-  setPolychromaticPaletteColor: (index: 0 | 1 | 2 | 3, color: PaletteColor) => Promise<void>;
+  setPaletteColor: (index: 0 | 1 | 2 | 3, color: PaletteColor) => Promise<void>;
   renderPreview: (canvas: HTMLCanvasElement) => Promise<void>;
   loadPreviewFile: (file: File) => Promise<void>;
   loadPreviewUrl: (url: string, fileName: string) => Promise<void>;
@@ -60,33 +66,63 @@ const polychromaticDefaultSettings: PolychromaticSettings = {
   ],
 };
 
+const defaultSettingsByMode: DitherSettingsByMode = {
+  monochromatic: monochromaticDefaultSettings,
+  polychromatic: polychromaticDefaultSettings,
+};
+
+const getSettingsForMode = (settingsByMode: DitherSettingsByMode, mode: DitherMode) => {
+  return settingsByMode[mode];
+};
+
+const getPaletteColorFromSwatch = (
+  swatch: SwatchMap[keyof SwatchMap],
+  fallback: PaletteColor,
+): PaletteColor => {
+  if (!swatch) {
+    return fallback;
+  }
+
+  const [red, green, blue] = swatch.color.array();
+
+  return [red, green, blue];
+};
+
+const getPolychromaticPaletteFromSwatches = async (
+  sourceImage: ImageBitmap,
+  fallbackPalette: PolychromaticPalette,
+): Promise<PolychromaticPalette> => {
+  const swatches = await getSwatches(sourceImage);
+
+  return [
+    getPaletteColorFromSwatch(swatches.DarkVibrant, fallbackPalette[0]),
+    getPaletteColorFromSwatch(swatches.Muted, fallbackPalette[1]),
+    getPaletteColorFromSwatch(swatches.Vibrant, fallbackPalette[2]),
+    getPaletteColorFromSwatch(swatches.LightVibrant, fallbackPalette[3]),
+  ];
+};
+
 export const useDitherStore = create<DitherState>((set, get) => ({
+  mode: "monochromatic",
   previewStatus: "idle",
   previewCanvas: null,
   sourceImage: null,
   renderTimeMs: null,
   settings: monochromaticDefaultSettings,
+  settingsByMode: defaultSettingsByMode,
   setPreviewCanvas: (canvas) => {
     set({ previewCanvas: canvas });
   },
   setMode: async (mode) => {
-    const { previewCanvas, settings, sourceImage } = get();
+    const { previewCanvas, settingsByMode, sourceImage } = get();
 
-    if (settings.mode === mode) {
+    if (get().mode === mode) {
       return;
     }
 
     set({
-      settings:
-        mode === "monochromatic"
-          ? {
-              ...monochromaticDefaultSettings,
-              contrast: settings.contrast,
-            }
-          : {
-              ...polychromaticDefaultSettings,
-              contrast: settings.contrast,
-            },
+      mode,
+      settings: getSettingsForMode(settingsByMode, mode),
     });
 
     if (!previewCanvas || !sourceImage) {
@@ -96,12 +132,17 @@ export const useDitherStore = create<DitherState>((set, get) => ({
     await get().renderPreview(previewCanvas);
   },
   setContrast: async (contrast) => {
-    const { previewCanvas, settings, sourceImage } = get();
+    const { mode, previewCanvas, settingsByMode, sourceImage } = get();
+    const nextSettings = {
+      ...getSettingsForMode(settingsByMode, mode),
+      contrast,
+    };
 
     set({
-      settings: {
-        ...settings,
-        contrast,
+      settings: nextSettings,
+      settingsByMode: {
+        ...settingsByMode,
+        [mode]: nextSettings,
       },
     });
 
@@ -111,44 +152,39 @@ export const useDitherStore = create<DitherState>((set, get) => ({
 
     await get().renderPreview(previewCanvas);
   },
-  setMonochromaticPaletteColor: async (index, color) => {
-    const { previewCanvas, settings, sourceImage } = get();
+  setPaletteColor: async (index, color) => {
+    const { mode, previewCanvas, settingsByMode, sourceImage } = get();
 
-    if (settings.mode !== "monochromatic") {
+    if (mode === "monochromatic" && index > 1) {
       return;
     }
+
+    const nextSettings =
+      mode === "monochromatic"
+        ? ({
+            ...settingsByMode.monochromatic,
+            palette:
+              index === 0
+                ? [color, settingsByMode.monochromatic.palette[1]]
+                : [settingsByMode.monochromatic.palette[0], color],
+          } satisfies MonochromaticSettings)
+        : ({
+            ...settingsByMode.polychromatic,
+            palette:
+              index === 0
+                ? [color, settingsByMode.polychromatic.palette[1], settingsByMode.polychromatic.palette[2], settingsByMode.polychromatic.palette[3]]
+                : index === 1
+                  ? [settingsByMode.polychromatic.palette[0], color, settingsByMode.polychromatic.palette[2], settingsByMode.polychromatic.palette[3]]
+                  : index === 2
+                    ? [settingsByMode.polychromatic.palette[0], settingsByMode.polychromatic.palette[1], color, settingsByMode.polychromatic.palette[3]]
+                    : [settingsByMode.polychromatic.palette[0], settingsByMode.polychromatic.palette[1], settingsByMode.polychromatic.palette[2], color],
+          } satisfies PolychromaticSettings);
 
     set({
-      settings: {
-        ...settings,
-        palette: index === 0 ? [color, settings.palette[1]] : [settings.palette[0], color],
-      },
-    });
-
-    if (!previewCanvas || !sourceImage) {
-      return;
-    }
-
-    await get().renderPreview(previewCanvas);
-  },
-  setPolychromaticPaletteColor: async (index, color) => {
-    const { previewCanvas, settings, sourceImage } = get();
-
-    if (settings.mode !== "polychromatic") {
-      return;
-    }
-
-    set({
-      settings: {
-        ...settings,
-        palette:
-          index === 0
-            ? [color, settings.palette[1], settings.palette[2], settings.palette[3]]
-            : index === 1
-              ? [settings.palette[0], color, settings.palette[2], settings.palette[3]]
-              : index === 2
-                ? [settings.palette[0], settings.palette[1], color, settings.palette[3]]
-                : [settings.palette[0], settings.palette[1], settings.palette[2], color],
+      settings: nextSettings,
+      settingsByMode: {
+        ...settingsByMode,
+        [mode]: nextSettings,
       },
     });
 
@@ -238,12 +274,26 @@ export const useDitherStore = create<DitherState>((set, get) => ({
     });
 
     const nextSourceImage = await createImageBitmap(file);
-    const { previewCanvas, sourceImage, renderPreview } = get();
+    const currentPolychromaticSettings = get().settingsByMode.polychromatic;
+    const nextPolychromaticPalette = await getPolychromaticPaletteFromSwatches(
+      nextSourceImage,
+      currentPolychromaticSettings.palette,
+    );
+    const nextPolychromaticSettings = {
+      ...currentPolychromaticSettings,
+      palette: nextPolychromaticPalette,
+    } satisfies PolychromaticSettings;
+    const { mode, previewCanvas, sourceImage, renderPreview, settingsByMode } = get();
 
     sourceImage?.close();
 
     set({
       sourceImage: nextSourceImage,
+      settings: mode === "polychromatic" ? nextPolychromaticSettings : get().settings,
+      settingsByMode: {
+        ...settingsByMode,
+        polychromatic: nextPolychromaticSettings,
+      },
     });
 
     if (!previewCanvas) {

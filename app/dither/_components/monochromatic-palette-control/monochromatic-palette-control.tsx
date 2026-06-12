@@ -17,9 +17,7 @@ const paletteControls = [
 
 export const MonochromaticPaletteControl = () => {
   const settings = useDitherStore((state) => state.settings);
-  const setMonochromaticPaletteColor = useDitherStore(
-    (state) => state.setMonochromaticPaletteColor,
-  );
+  const setPaletteColor = useDitherStore((state) => state.setPaletteColor);
 
   if (settings.mode !== "monochromatic") {
     return null;
@@ -34,7 +32,7 @@ export const MonochromaticPaletteControl = () => {
             aria-label={label}
             className={styles.colorInput}
             onChange={(event) => {
-              void setMonochromaticPaletteColor(index, toRgbColor(event.currentTarget.value));
+              void setPaletteColor(index, toRgbColor(event.currentTarget.value));
             }}
             type="color"
             value={toHexColor(settings.palette[index])}
