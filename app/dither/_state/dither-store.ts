@@ -1,4 +1,5 @@
 import { getSwatches, type SwatchMap } from "colorthief";
+import tinycolor from "tinycolor2";
 import { match } from "ts-pattern";
 import { create } from "zustand";
 import { getPreviewResolution } from "../_lib/get-preview-resolution";
@@ -54,15 +55,42 @@ type DitherState = {
   exportPreview: (format: ExportFormat) => Promise<void>;
 };
 
+const extractedPaletteSaturationBoost = 50;
+
+const getSettingsForMode = (settingsByMode: DitherSettingsByMode, mode: DitherMode) => {
+  return settingsByMode[mode];
+};
+
+const getRandomNumber = (min: number, max: number) => {
+  return Math.random() * (max - min) + min;
+};
+
+const createRandomPaletteColor = (
+  saturationRange: readonly [number, number],
+  lightnessRange: readonly [number, number],
+): PaletteColor => {
+  const randomColor = tinycolor({
+    h: getRandomNumber(0, 360),
+    s: getRandomNumber(...saturationRange),
+    l: getRandomNumber(...lightnessRange),
+  }).toRgb();
+
+  return [randomColor.r, randomColor.g, randomColor.b];
+};
+
+const createRandomMonochromaticPalette = (): MonochromaticPalette => {
+  return [
+    createRandomPaletteColor([35, 80], [10, 28]),
+    createRandomPaletteColor([35, 90], [68, 88]),
+  ];
+};
+
 const monochromaticDefaultSettings: MonochromaticSettings = {
   mode: "monochromatic",
   brightness: 0,
   contrast: 1,
   thresholdMap: "bayer",
-  palette: [
-    [80, 60, 100],
-    [255, 140, 50],
-  ],
+  palette: createRandomMonochromaticPalette(),
 };
 
 const polychromaticDefaultSettings: PolychromaticSettings = {
@@ -81,12 +109,6 @@ const polychromaticDefaultSettings: PolychromaticSettings = {
 const defaultSettingsByMode: DitherSettingsByMode = {
   monochromatic: monochromaticDefaultSettings,
   polychromatic: polychromaticDefaultSettings,
-};
-
-const extractedPaletteSaturationBoost = 50;
-
-const getSettingsForMode = (settingsByMode: DitherSettingsByMode, mode: DitherMode) => {
-  return settingsByMode[mode];
 };
 
 const getPaletteColorFromSwatch = (
