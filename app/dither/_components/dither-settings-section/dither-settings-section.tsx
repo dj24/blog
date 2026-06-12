@@ -6,6 +6,7 @@ import { ModeCheckbox } from "../mode-checkbox/mode-checkbox";
 import { MonochromaticPaletteControl } from "../monochromatic-palette-control/monochromatic-palette-control";
 import { PolychromaticPaletteControl } from "../polychromatic-palette-control/polychromatic-palette-control";
 import { RangeInput } from "../range-input/range-input";
+import { ThresholdMapSelect } from "../threshold-map-select/threshold-map-select";
 import styles from "../../page.module.css";
 
 const CONTRAST_SCALE = 0.5;
@@ -56,6 +57,9 @@ export const DitherSettingsSection = () => {
                 />
               </div>
               <div className={styles.cardRow}>
+                <ThresholdMapSelect />
+              </div>
+              <div className={styles.cardRow}>
                 <p>palette</p>
                 <MonochromaticPaletteControl />
               </div>
@@ -98,6 +102,9 @@ export const DitherSettingsSection = () => {
                   scale={BRIGHTNESS_SCALE}
                   value={brightness}
                 />
+              </div>
+              <div className={styles.cardRow}>
+                <ThresholdMapSelect />
               </div>
               <div className={styles.cardRow}>
                 <p>palette</p>

@@ -5,6 +5,7 @@ import {
 } from "webgpu-utils";
 import {
   canvasFormat,
+  createThresholdTexture,
   createPreviewComputeContext,
   toShaderColor,
   workgroupSize,
@@ -18,6 +19,7 @@ struct PreviewUniforms {
   sourceWidth: u32,
   sourceHeight: u32,
   bytesPerRow: u32,
+  thresholdMapMode: u32,
   brightness: f32,
   contrast: f32,
   monochromaticDarkColor: vec4f,
@@ -27,6 +29,7 @@ struct PreviewUniforms {
 @group(0) @binding(0) var<uniform> previewUniforms: PreviewUniforms;
 @group(0) @binding(1) var<storage, read_write> pixels: array<u32>;
 @group(0) @binding(2) var sourceTexture: texture_2d<f32>;
+@group(0) @binding(3) var thresholdTexture: texture_2d<f32>;
 
 const bayerMatrix = array<u32, 64>(
   0u, 48u, 12u, 60u, 3u, 51u, 15u, 63u,
@@ -65,6 +68,24 @@ fn bayerThreshold(position: vec2u) -> f32 {
   return (f32(bayerMatrix[index]) + 0.5) / 64.0;
 }
 
+fn blueNoiseThreshold(position: vec2u) -> f32 {
+  let thresholdTextureSize = textureDimensions(thresholdTexture);
+  let textureCoordinate = vec2u(
+    position.x % thresholdTextureSize.x,
+    position.y % thresholdTextureSize.y,
+  );
+
+  return luminance(textureLoad(thresholdTexture, vec2i(textureCoordinate), 0).rgb);
+}
+
+fn getThreshold(position: vec2u) -> f32 {
+  if (previewUniforms.thresholdMapMode == 1u) {
+    return blueNoiseThreshold(position);
+  }
+
+  return bayerThreshold(position);
+}
+
 fn averageSourceRegion(position: vec2u) -> vec4f {
   let sourceOrigin = position * 4u;
   let sourceMax = vec2u(
@@ -95,7 +116,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   }
 
   let color = averageSourceRegion(id.xy);
-  let threshold = bayerThreshold(id.xy);
+  let threshold = getThreshold(id.xy);
   let adjustedLuminance = applyBrightness(luminance(color.rgb));
   let contrastedLuminance = applyContrast(adjustedLuminance);
   let ditheredColor = select(
@@ -116,7 +137,7 @@ export const runMonochromaticPreviewComputePipeline = async (
   canvas: HTMLCanvasElement,
   options: MonochromaticPreviewComputePipelineOptions,
 ) => {
-  const { width, height, sourceImage, brightness, contrast, palette } = options;
+  const { width, height, sourceImage, brightness, contrast, palette, thresholdMap } = options;
 
   if (!sourceImage) {
     throw new Error("No preview image is loaded.");
@@ -148,6 +169,10 @@ export const runMonochromaticPreviewComputePipeline = async (
     mips: false,
     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
   });
+  const thresholdTexture = createThresholdTexture(
+    device,
+    thresholdMap === "blue-noise" ? options.thresholdMapTexture : undefined,
+  );
 
   previewUniforms.set({
     width,
@@ -155,6 +180,7 @@ export const runMonochromaticPreviewComputePipeline = async (
     sourceWidth: sourceImage.width,
     sourceHeight: sourceImage.height,
     bytesPerRow,
+    thresholdMapMode: thresholdMap === "blue-noise" ? 1 : 0,
     brightness,
     contrast,
     monochromaticDarkColor: toShaderColor(palette[0]),
@@ -176,6 +202,10 @@ export const runMonochromaticPreviewComputePipeline = async (
       {
         binding: 2,
         resource: sourceTexture.createView(),
+      },
+      {
+        binding: 3,
+        resource: thresholdTexture.createView(),
       },
     ],
   });
@@ -208,4 +238,5 @@ export const runMonochromaticPreviewComputePipeline = async (
   uniformBuffer.destroy();
   pixelBuffer.destroy();
   sourceTexture.destroy();
+  thresholdTexture.destroy();
 };

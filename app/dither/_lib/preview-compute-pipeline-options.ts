@@ -5,13 +5,25 @@ export type PreviewComputePipelineBaseOptions = {
 };
 
 export type PreviewPaletteColor = readonly [red: number, green: number, blue: number];
+export type ThresholdMapMode = "bayer" | "blue-noise";
+
+type BayerThresholdMapOptions = {
+  thresholdMap: "bayer";
+};
+
+type BlueNoiseThresholdMapOptions = {
+  thresholdMap: "blue-noise";
+  thresholdMapTexture: ImageBitmap;
+};
+
+type ThresholdMapOptions = BayerThresholdMapOptions | BlueNoiseThresholdMapOptions;
 
 export type MonochromaticPreviewComputePipelineOptions = PreviewComputePipelineBaseOptions & {
   type: "monochromatic";
   brightness: number;
   contrast: number;
   palette: readonly [PreviewPaletteColor, PreviewPaletteColor];
-};
+} & ThresholdMapOptions;
 
 export type PolychromaticPreviewComputePipelineOptions = PreviewComputePipelineBaseOptions & {
   type: "polychromatic";
@@ -23,7 +35,7 @@ export type PolychromaticPreviewComputePipelineOptions = PreviewComputePipelineB
     PreviewPaletteColor,
     PreviewPaletteColor,
   ];
-};
+} & ThresholdMapOptions;
 
 export type PreviewComputePipelineOptions =
   | MonochromaticPreviewComputePipelineOptions

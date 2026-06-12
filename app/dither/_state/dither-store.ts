@@ -3,6 +3,7 @@ import { match } from "ts-pattern";
 import { create } from "zustand";
 import { getPreviewResolution } from "../_lib/get-preview-resolution";
 import { saturatePaletteColor, type PaletteColor } from "../_lib/palette-color";
+import { getBlueNoiseTexture, type ThresholdMapMode } from "../_lib/threshold-map";
 import { runPreviewComputePipeline } from "../_lib/run-preview-compute-pipeline";
 
 type PreviewStatus = "idle" | "running" | "ready" | "error";
@@ -14,6 +15,7 @@ type MonochromaticSettings = {
   mode: "monochromatic";
   brightness: number;
   contrast: number;
+  thresholdMap: ThresholdMapMode;
   palette: MonochromaticPalette;
 };
 
@@ -21,6 +23,7 @@ type PolychromaticSettings = {
   mode: "polychromatic";
   brightness: number;
   contrast: number;
+  thresholdMap: ThresholdMapMode;
   palette: PolychromaticPalette;
 };
 
@@ -43,6 +46,7 @@ type DitherState = {
   setBrightness: (brightness: number) => Promise<void>;
   setMode: (mode: DitherMode) => Promise<void>;
   setContrast: (contrast: number) => Promise<void>;
+  setThresholdMap: (thresholdMap: ThresholdMapMode) => Promise<void>;
   setPaletteColor: (index: 0 | 1 | 2 | 3, color: PaletteColor) => Promise<void>;
   renderPreview: (canvas: HTMLCanvasElement) => Promise<void>;
   loadPreviewFile: (file: File) => Promise<void>;
@@ -54,6 +58,7 @@ const monochromaticDefaultSettings: MonochromaticSettings = {
   mode: "monochromatic",
   brightness: 0,
   contrast: 1,
+  thresholdMap: "bayer",
   palette: [
     [80, 60, 100],
     [255, 140, 50],
@@ -64,6 +69,7 @@ const polychromaticDefaultSettings: PolychromaticSettings = {
   mode: "polychromatic",
   brightness: 0,
   contrast: 1,
+  thresholdMap: "bayer",
   palette: [
     [25, 20, 35],
     [80, 60, 100],
@@ -181,6 +187,27 @@ export const useDitherStore = create<DitherState>((set, get) => ({
 
     await get().renderPreview(previewCanvas);
   },
+  setThresholdMap: async (thresholdMap) => {
+    const { mode, previewCanvas, settingsByMode, sourceImage } = get();
+    const nextSettings = {
+      ...getSettingsForMode(settingsByMode, mode),
+      thresholdMap,
+    };
+
+    set({
+      settings: nextSettings,
+      settingsByMode: {
+        ...settingsByMode,
+        [mode]: nextSettings,
+      },
+    });
+
+    if (!previewCanvas || !sourceImage) {
+      return;
+    }
+
+    await get().renderPreview(previewCanvas);
+  },
   setPaletteColor: async (index, color) => {
     const { mode, previewCanvas, settingsByMode, sourceImage } = get();
     const polychromaticPalette = settingsByMode.polychromatic.palette;
@@ -267,6 +294,16 @@ export const useDitherStore = create<DitherState>((set, get) => ({
       previewStatus: "running",
     });
 
+    const thresholdMapOptions =
+      settings.thresholdMap === "blue-noise"
+        ? {
+            thresholdMap: "blue-noise" as const,
+            thresholdMapTexture: await getBlueNoiseTexture(),
+          }
+        : {
+            thresholdMap: "bayer" as const,
+          };
+
     const start = performance.now();
     await runPreviewComputePipeline(
       canvas,
@@ -279,6 +316,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
             brightness: settings.brightness,
             contrast: settings.contrast,
             palette: settings.palette,
+            ...thresholdMapOptions,
           }
         : {
             type: "polychromatic",
@@ -288,6 +326,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
             brightness: settings.brightness,
             contrast: settings.contrast,
             palette: settings.palette,
+            ...thresholdMapOptions,
           },
     );
     const end = performance.now();

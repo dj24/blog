@@ -5,6 +5,7 @@ import {
 } from "webgpu-utils";
 import {
   canvasFormat,
+  createThresholdTexture,
   createPreviewComputeContext,
   toShaderColor,
   workgroupSize,
@@ -18,6 +19,7 @@ struct PreviewUniforms {
   sourceWidth: u32,
   sourceHeight: u32,
   bytesPerRow: u32,
+  thresholdMapMode: u32,
   brightness: f32,
   contrast: f32,
   paletteColor0: vec4f,
@@ -29,6 +31,7 @@ struct PreviewUniforms {
 @group(0) @binding(0) var<uniform> previewUniforms: PreviewUniforms;
 @group(0) @binding(1) var<storage, read_write> pixels: array<u32>;
 @group(0) @binding(2) var sourceTexture: texture_2d<f32>;
+@group(0) @binding(3) var thresholdTexture: texture_2d<f32>;
 
 const bayerMatrix = array<u32, 64>(
   0u, 48u, 12u, 60u, 3u, 51u, 15u, 63u,
@@ -65,10 +68,32 @@ fn applyContrast(color: vec3f) -> vec3f {
   );
 }
 
+fn luminance(color: vec3f) -> f32 {
+  return dot(color, vec3f(0.2126, 0.7152, 0.0722));
+}
+
 fn bayerThreshold(position: vec2u) -> f32 {
   let index = (position.y & 7u) * 8u + (position.x & 7u);
 
   return (f32(bayerMatrix[index]) + 0.5) / 64.0;
+}
+
+fn blueNoiseThreshold(position: vec2u) -> f32 {
+  let thresholdTextureSize = textureDimensions(thresholdTexture);
+  let textureCoordinate = vec2u(
+    position.x % thresholdTextureSize.x,
+    position.y % thresholdTextureSize.y,
+  );
+
+  return luminance(textureLoad(thresholdTexture, vec2i(textureCoordinate), 0).rgb);
+}
+
+fn getThreshold(position: vec2u) -> f32 {
+  if (previewUniforms.thresholdMapMode == 1u) {
+    return blueNoiseThreshold(position);
+  }
+
+  return bayerThreshold(position);
 }
 
 fn averageSourceRegion(position: vec2u) -> vec4f {
@@ -140,7 +165,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     }
   }
 
-  let threshold = bayerThreshold(id.xy);
+  let threshold = getThreshold(id.xy);
   let totalDistance = nearestDistance + secondNearestDistance;
   let nearestWeight = select(0.5, secondNearestDistance / totalDistance, totalDistance > 0.0);
   let ditheredColor = select(
@@ -161,7 +186,7 @@ export const runPolychromaticPreviewComputePipeline = async (
   canvas: HTMLCanvasElement,
   options: PolychromaticPreviewComputePipelineOptions,
 ) => {
-  const { width, height, sourceImage, brightness, contrast, palette } = options;
+  const { width, height, sourceImage, brightness, contrast, palette, thresholdMap } = options;
 
   if (!sourceImage) {
     throw new Error("No preview image is loaded.");
@@ -193,6 +218,10 @@ export const runPolychromaticPreviewComputePipeline = async (
     mips: false,
     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
   });
+  const thresholdTexture = createThresholdTexture(
+    device,
+    thresholdMap === "blue-noise" ? options.thresholdMapTexture : undefined,
+  );
 
   previewUniforms.set({
     width,
@@ -200,6 +229,7 @@ export const runPolychromaticPreviewComputePipeline = async (
     sourceWidth: sourceImage.width,
     sourceHeight: sourceImage.height,
     bytesPerRow,
+    thresholdMapMode: thresholdMap === "blue-noise" ? 1 : 0,
     brightness,
     contrast,
     paletteColor0: toShaderColor(palette[0]),
@@ -223,6 +253,10 @@ export const runPolychromaticPreviewComputePipeline = async (
       {
         binding: 2,
         resource: sourceTexture.createView(),
+      },
+      {
+        binding: 3,
+        resource: thresholdTexture.createView(),
       },
     ],
   });
@@ -255,4 +289,5 @@ export const runPolychromaticPreviewComputePipeline = async (
   uniformBuffer.destroy();
   pixelBuffer.destroy();
   sourceTexture.destroy();
+  thresholdTexture.destroy();
 };

@@ -1,3 +1,4 @@
+import { createTextureFromSource } from "webgpu-utils";
 import { getGpuDevice } from "./gpu-device";
 import type { PreviewPaletteColor } from "./preview-compute-pipeline-options";
 
@@ -53,4 +54,45 @@ export const createPreviewComputeContext = async (
     context,
     bytesPerRow: alignTo(width * 4, 256),
   };
+};
+
+export const createThresholdTexture = (
+  device: GPUDevice,
+  thresholdMapTexture?: ImageBitmap,
+) => {
+  if (thresholdMapTexture) {
+    return createTextureFromSource(device, thresholdMapTexture, {
+      format: canvasFormat,
+      flipY: false,
+      mips: false,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+  }
+
+  const texture = device.createTexture({
+    size: {
+      width: 1,
+      height: 1,
+    },
+    format: canvasFormat,
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+  });
+
+  device.queue.writeTexture(
+    {
+      texture,
+    },
+    new Uint8Array([255, 255, 255, 255]),
+    {
+      bytesPerRow: 4,
+      rowsPerImage: 1,
+    },
+    {
+      width: 1,
+      height: 1,
+      depthOrArrayLayers: 1,
+    },
+  );
+
+  return texture;
 };
