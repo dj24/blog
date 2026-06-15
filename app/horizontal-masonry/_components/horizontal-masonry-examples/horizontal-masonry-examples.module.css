@@ -1,0 +1,52 @@
+.examples {
+  display: grid;
+  gap: 16px;
+}
+
+.example {
+  width: 100%;
+}
+
+.tile {
+  min-height: 100%;
+  display: grid;
+  place-items: end start;
+  padding: 12px;
+  border: 1px solid rgba(22, 22, 18, 0.18);
+  color: #161612;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tile span {
+  display: block;
+  padding: 6px 7px;
+  background: #ffffff;
+  color: #161612;
+}
+
+.ink {
+  background: #2d3033;
+  color: #f7f1e7;
+}
+
+.moss {
+  background: #8fa678;
+}
+
+.clay {
+  background: #cc765d;
+}
+
+.sky {
+  background: #83aebb;
+}
+
+.lemon {
+  background: #eedb76;
+}
+
+.rose {
+  background: #d99aa0;
+}
