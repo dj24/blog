@@ -1,0 +1,5 @@
+<svg width="360" height="360" viewBox="0 0 360 360" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 0H180V180A180 180 0 0 1 0 0Z" fill="#d74e4a" />
+  <path d="M180 0H360V180A180 180 0 0 1 180 0Z" fill="#d74e4a" />
+  <path d="M180 180H360V360A180 180 0 0 1 180 180Z" fill="#d74e4a" />
+</svg>

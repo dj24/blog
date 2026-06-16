@@ -1,5 +1,6 @@
 import { Arc } from "./_components/arc/arc";
 import { Hanken_Grotesk } from "next/font/google";
+import type { Metadata } from "next";
 import pearlEarring from "../pearl-earring.jpg";
 import { Bayer } from "./_components/bayer/bayer";
 import { Card } from "./_components/card/card";
@@ -15,6 +16,10 @@ const hankenGrotesk = Hanken_Grotesk({
   variable: "--font-hanken-grotesk",
   subsets: ["latin"],
 });
+
+export const metadata: Metadata = {
+  title: "Ordered Dithering",
+};
 
 const Page = () => {
   return (

@@ -85,8 +85,9 @@ fn blueNoiseThreshold(position: vec2u) -> f32 {
     position.x % thresholdTextureSize.x,
     position.y % thresholdTextureSize.y,
   );
+  let thresholdSample = luminance(textureLoad(thresholdTexture, vec2i(textureCoordinate), 0).rgb);
 
-  return luminance(textureLoad(thresholdTexture, vec2i(textureCoordinate), 0).rgb);
+  return ((thresholdSample * 255.0) + 0.5) / 256.0;
 }
 
 fn getThreshold(position: vec2u) -> f32 {
