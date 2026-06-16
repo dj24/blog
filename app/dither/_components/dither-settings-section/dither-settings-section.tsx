@@ -1,5 +1,6 @@
 "use client";
 
+import type { Downscale } from "../../_state/dither-store";
 import { useDitherStore } from "../../_state/dither-store";
 import { Card } from "../card/card";
 import { ModeCheckbox } from "../mode-checkbox/mode-checkbox";
@@ -11,11 +12,22 @@ import styles from "../../page.module.css";
 
 const CONTRAST_SCALE = 0.5;
 const BRIGHTNESS_SCALE = 0.1;
+const DOWNSCALE_SLIDER_MIN = 1;
+const DOWNSCALE_SLIDER_MAX = 5;
+
+const getDownscaleFromSliderValue = (value: number): Downscale => {
+  return 2 ** (value - 1) as Downscale;
+};
+
+const getSliderValueFromDownscale = (downscale: Downscale) => {
+  return Math.log2(downscale) + 1;
+};
 
 export const DitherSettingsSection = () => {
-  const { brightness, contrast, mode } = useDitherStore((state) => state.settings);
+  const { brightness, contrast, downscale, mode } = useDitherStore((state) => state.settings);
   const setBrightness = useDitherStore((state) => state.setBrightness);
   const setContrast = useDitherStore((state) => state.setContrast);
+  const setDownscale = useDitherStore((state) => state.setDownscale);
 
   return (
     <div className={`${styles.section} ${styles.settingsSection}`}>
@@ -54,6 +66,20 @@ export const DitherSettingsSection = () => {
                   }}
                   scale={BRIGHTNESS_SCALE}
                   value={brightness}
+                />
+              </div>
+              <div className={styles.cardRow}>
+                <p>downscale</p>
+                <RangeInput
+                  id="downscale-monochromatic"
+                  name="downscale-monochromatic"
+                  min={String(DOWNSCALE_SLIDER_MIN)}
+                  max={String(DOWNSCALE_SLIDER_MAX)}
+                  onValueChange={(value) => {
+                    void setDownscale(getDownscaleFromSliderValue(value));
+                  }}
+                  step="1"
+                  value={getSliderValueFromDownscale(downscale)}
                 />
               </div>
               <div className={styles.cardRow}>
@@ -101,6 +127,20 @@ export const DitherSettingsSection = () => {
                   }}
                   scale={BRIGHTNESS_SCALE}
                   value={brightness}
+                />
+              </div>
+              <div className={styles.cardRow}>
+                <p>downscale</p>
+                <RangeInput
+                  id="downscale-polychromatic"
+                  name="downscale-polychromatic"
+                  min={String(DOWNSCALE_SLIDER_MIN)}
+                  max={String(DOWNSCALE_SLIDER_MAX)}
+                  onValueChange={(value) => {
+                    void setDownscale(getDownscaleFromSliderValue(value));
+                  }}
+                  step="1"
+                  value={getSliderValueFromDownscale(downscale)}
                 />
               </div>
               <div className={styles.cardRow}>

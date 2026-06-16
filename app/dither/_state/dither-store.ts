@@ -11,11 +11,13 @@ type PreviewStatus = "idle" | "running" | "ready" | "error";
 type ExportFormat = "jpeg" | "png";
 type MonochromaticPalette = readonly [PaletteColor, PaletteColor];
 type PolychromaticPalette = readonly [PaletteColor, PaletteColor, PaletteColor, PaletteColor];
+export type Downscale = 1 | 2 | 4 | 8 | 16;
 
 type MonochromaticSettings = {
   mode: "monochromatic";
   brightness: number;
   contrast: number;
+  downscale: Downscale;
   thresholdMap: ThresholdMapMode;
   palette: MonochromaticPalette;
 };
@@ -24,6 +26,7 @@ type PolychromaticSettings = {
   mode: "polychromatic";
   brightness: number;
   contrast: number;
+  downscale: Downscale;
   thresholdMap: ThresholdMapMode;
   palette: PolychromaticPalette;
 };
@@ -47,6 +50,7 @@ type DitherState = {
   setBrightness: (brightness: number) => Promise<void>;
   setMode: (mode: DitherMode) => Promise<void>;
   setContrast: (contrast: number) => Promise<void>;
+  setDownscale: (downscale: Downscale) => Promise<void>;
   setThresholdMap: (thresholdMap: ThresholdMapMode) => Promise<void>;
   setPaletteColor: (index: 0 | 1 | 2 | 3, color: PaletteColor) => Promise<void>;
   renderPreview: (canvas: HTMLCanvasElement) => Promise<void>;
@@ -89,6 +93,7 @@ const monochromaticDefaultSettings: MonochromaticSettings = {
   mode: "monochromatic",
   brightness: 0,
   contrast: 1,
+  downscale: 4,
   thresholdMap: "bayer",
   palette: createRandomMonochromaticPalette(),
 };
@@ -97,6 +102,7 @@ const polychromaticDefaultSettings: PolychromaticSettings = {
   mode: "polychromatic",
   brightness: 0,
   contrast: 1,
+  downscale: 4,
   thresholdMap: "bayer",
   palette: [
     [25, 20, 35],
@@ -209,6 +215,27 @@ export const useDitherStore = create<DitherState>((set, get) => ({
 
     await get().renderPreview(previewCanvas);
   },
+  setDownscale: async (downscale) => {
+    const { mode, previewCanvas, settingsByMode, sourceImage } = get();
+    const nextSettings = {
+      ...getSettingsForMode(settingsByMode, mode),
+      downscale,
+    };
+
+    set({
+      settings: nextSettings,
+      settingsByMode: {
+        ...settingsByMode,
+        [mode]: nextSettings,
+      },
+    });
+
+    if (!previewCanvas || !sourceImage) {
+      return;
+    }
+
+    await get().renderPreview(previewCanvas);
+  },
   setThresholdMap: async (thresholdMap) => {
     const { mode, previewCanvas, settingsByMode, sourceImage } = get();
     const nextSettings = {
@@ -302,7 +329,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
       return;
     }
 
-    const previewResolution = getPreviewResolution(sourceImage);
+    const previewResolution = getPreviewResolution(sourceImage, settings.downscale);
 
     if (!previewResolution) {
       set({
@@ -337,6 +364,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
             sourceImage,
             brightness: settings.brightness,
             contrast: settings.contrast,
+            downscale: settings.downscale,
             palette: settings.palette,
             ...thresholdMapOptions,
           }
@@ -347,6 +375,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
             sourceImage,
             brightness: settings.brightness,
             contrast: settings.contrast,
+            downscale: settings.downscale,
             palette: settings.palette,
             ...thresholdMapOptions,
           },
@@ -428,7 +457,7 @@ export const useDitherStore = create<DitherState>((set, get) => ({
       return;
     }
 
-    const previewResolution = getPreviewResolution(sourceImage);
+    const previewResolution = getPreviewResolution(sourceImage, get().settings.downscale);
 
     if (!previewResolution) {
       set({

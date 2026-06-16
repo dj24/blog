@@ -10,9 +10,10 @@ export const PreviewCanvas = ({ defaultImageUrl }: { defaultImageUrl: string }) 
   const hasRequestedDefaultImageRef = useRef(false);
   const loadPreviewUrl = useDitherStore((state) => state.loadPreviewUrl);
   const previewStatus = useDitherStore((state) => state.previewStatus);
+  const downscale = useDitherStore((state) => state.settings.downscale);
   const setPreviewCanvas = useDitherStore((state) => state.setPreviewCanvas);
   const sourceImage = useDitherStore((state) => state.sourceImage);
-  const previewResolution = getPreviewResolution(sourceImage);
+  const previewResolution = getPreviewResolution(sourceImage, downscale);
 
   useEffect(() => {
     const canvas = canvasRef.current;

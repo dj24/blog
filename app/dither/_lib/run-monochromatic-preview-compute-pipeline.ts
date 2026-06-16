@@ -20,6 +20,7 @@ struct PreviewUniforms {
   sourceHeight: u32,
   bytesPerRow: u32,
   thresholdMapMode: u32,
+  downscale: u32,
   brightness: f32,
   contrast: f32,
   monochromaticDarkColor: vec4f,
@@ -87,15 +88,16 @@ fn getThreshold(position: vec2u) -> f32 {
 }
 
 fn averageSourceRegion(position: vec2u) -> vec4f {
-  let sourceOrigin = position * 4u;
+  let downscale = max(previewUniforms.downscale, 1u);
+  let sourceOrigin = position * downscale;
   let sourceMax = vec2u(
     max(previewUniforms.sourceWidth, 1u) - 1u,
     max(previewUniforms.sourceHeight, 1u) - 1u,
   );
   var accumulatedColor = vec4f(0.0);
 
-  for (var offsetY = 0u; offsetY < 4u; offsetY = offsetY + 1u) {
-    for (var offsetX = 0u; offsetX < 4u; offsetX = offsetX + 1u) {
+  for (var offsetY = 0u; offsetY < downscale; offsetY = offsetY + 1u) {
+    for (var offsetX = 0u; offsetX < downscale; offsetX = offsetX + 1u) {
       let sourceCoordinate = min(sourceOrigin + vec2u(offsetX, offsetY), sourceMax);
 
       accumulatedColor += textureLoad(
@@ -106,7 +108,7 @@ fn averageSourceRegion(position: vec2u) -> vec4f {
     }
   }
 
-  return accumulatedColor / 16.0;
+  return accumulatedColor / f32(downscale * downscale);
 }
 
 @compute @workgroup_size(${workgroupSize}, ${workgroupSize})
@@ -137,7 +139,8 @@ export const runMonochromaticPreviewComputePipeline = async (
   canvas: HTMLCanvasElement,
   options: MonochromaticPreviewComputePipelineOptions,
 ) => {
-  const { width, height, sourceImage, brightness, contrast, palette, thresholdMap } = options;
+  const { width, height, sourceImage, brightness, contrast, downscale, palette, thresholdMap } =
+    options;
 
   if (!sourceImage) {
     throw new Error("No preview image is loaded.");
@@ -181,6 +184,7 @@ export const runMonochromaticPreviewComputePipeline = async (
     sourceHeight: sourceImage.height,
     bytesPerRow,
     thresholdMapMode: thresholdMap === "blue-noise" ? 1 : 0,
+    downscale,
     brightness,
     contrast,
     monochromaticDarkColor: toShaderColor(palette[0]),

@@ -22,6 +22,7 @@ export type MonochromaticPreviewComputePipelineOptions = PreviewComputePipelineB
   type: "monochromatic";
   brightness: number;
   contrast: number;
+  downscale: number;
   palette: readonly [PreviewPaletteColor, PreviewPaletteColor];
 } & ThresholdMapOptions;
 
@@ -29,6 +30,7 @@ export type PolychromaticPreviewComputePipelineOptions = PreviewComputePipelineB
   type: "polychromatic";
   brightness: number;
   contrast: number;
+  downscale: number;
   palette: readonly [
     PreviewPaletteColor,
     PreviewPaletteColor,
