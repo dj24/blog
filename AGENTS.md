@@ -6,11 +6,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 <!-- END:nextjs-agent-rules -->
 
+# General
+
+Each page can be considered a mini project. Check _plans folder in each when context is required.
+
 # Code Style
 
-- Always use arrow functions
+- Use arrow functions
 - Immutability where possible
 - Pure functions where possible
 - Component composition via children prop
 - No barrel files
-- Use named exports, not default exports, except where framework conventions require defaults
+- Use named exports over default exports where possible
