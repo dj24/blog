@@ -1,0 +1,289 @@
+.page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(255, 247, 237, 0.96), transparent 34%),
+    linear-gradient(180deg, #f4efe6 0%, #efe7d9 100%);
+  color: #171717;
+  padding: clamp(24px, 5vw, 72px);
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+.hero {
+  display: grid;
+  gap: 24px;
+  max-width: 880px;
+  margin-bottom: 32px;
+}
+
+.eyebrow {
+  color: #8f2d16;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.title {
+  font-size: clamp(3rem, 8vw, 6.8rem);
+  font-weight: 820;
+  line-height: 0.92;
+  max-width: 10ch;
+}
+
+.summary {
+  max-width: 60ch;
+  color: #4d4539;
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  line-height: 1.65;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  max-width: 720px;
+  border: 1px solid #d9cfbd;
+  background: #d9cfbd;
+}
+
+.stat {
+  display: grid;
+  gap: 8px;
+  min-height: 92px;
+  align-content: center;
+  background: rgba(255, 250, 240, 0.9);
+  padding: 18px;
+}
+
+.statLabel {
+  color: #6d6252;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.statValue {
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.panel {
+  border: 1px solid #1f1f1f;
+  background: rgba(255, 253, 248, 0.92);
+  box-shadow: 12px 12px 0 #171717;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #1f1f1f;
+  padding: 16px 18px;
+}
+
+.panelTitle {
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panelBadge {
+  border: 1px solid #1f1f1f;
+  background: #e7dcc9;
+  padding: 4px 9px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.panelSummary {
+  padding: 18px;
+  color: #5d5447;
+  line-height: 1.6;
+  border-bottom: 1px solid #ded4c3;
+}
+
+.cardGrid {
+  display: grid;
+  gap: 1px;
+  background: #ded4c3;
+}
+
+.card {
+  display: grid;
+  gap: 0;
+  background: #fffaf0;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border-bottom: 1px solid #ded4c3;
+}
+
+.cardEyebrow {
+  color: #8c7d67;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.cardTitle {
+  font-size: 1.15rem;
+  font-weight: 760;
+}
+
+.cardBadge {
+  border: 1px solid #ded4c3;
+  background: #fffdf8;
+  padding: 4px 8px;
+  color: #6d6252;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.cardBody {
+  display: grid;
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+  gap: 1px;
+  background: #ded4c3;
+}
+
+.previewCanvas {
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 1;
+  background:
+    linear-gradient(90deg, rgba(90, 76, 58, 0.04) 1px, transparent 1px),
+    linear-gradient(rgba(90, 76, 58, 0.04) 1px, transparent 1px),
+    #fffdf8;
+  background-size: 24px 24px;
+  padding: 20px;
+}
+
+.controls {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  background: #fffaf0;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.fieldLabel {
+  color: #6d6252;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fieldValue {
+  color: #4d4539;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.82rem;
+}
+
+.input {
+  width: 100%;
+  accent-color: #8f2d16;
+}
+
+.checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: #8f2d16;
+}
+
+.colorInput {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #ded4c3;
+  background: #fffdf8;
+}
+
+.metaList {
+  display: grid;
+  gap: 8px;
+}
+
+.metaRow {
+  display: grid;
+  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.metaLabel {
+  color: #6d6252;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.metaValue {
+  color: #332d25;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.readout {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #ded4c3;
+  background: #fffdf8;
+  padding: 12px;
+}
+
+.stopRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stopSwatch {
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(31, 31, 31, 0.12);
+}
+
+.stopText {
+  color: #4d4539;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 860px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    box-shadow: 8px 8px 0 #171717;
+  }
+
+  .panelHeader,
+  .cardHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cardBody {
+    grid-template-columns: 1fr;
+  }
+
+  .previewCanvas {
+    max-width: none;
+  }
+}
