@@ -1,4 +1,4 @@
 * Next JS
 * WebGPU
 * shadcn
-* Websockets
+* Party Kit

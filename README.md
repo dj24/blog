@@ -1,26 +1,60 @@
-## Getting Started
+# Blog
 
-Run the development server with `npm run dev`, `yarn dev`, `pnpm dev`, or `bun dev`.
+## Lottie Shape Types
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The current parser subset in this repo is defined in [app/lottie/_lib/types/lottie-shape.ts](/C:/Users/Dan/code/blog/app/lottie/_lib/types/lottie-shape.ts:1).
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+- `gr`: group
+- `sh`: bezier path
+- `rc`: rectangle
+- `el`: ellipse
+- `sr`: polystar container
+- `fl`: solid fill
+- `gf`: gradient fill
+- `st`: solid stroke
+- `gs`: gradient stroke
+- `tm`: trim paths
+- `tr`: transform
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The broader Lottie shape-item vocabulary also includes:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `rp`: repeater
+- `mm`: merge paths
+- `rd`: round corners
+- `pb`: pucker and bloat
+- `op`: offset paths
+- `zz`: zig zag
 
-## Learn More
+Putting that together, the full shape-item list we care about for the Lottie shape spec is:
 
-To learn more about Next.js, take a look at the following resources:
+- `gr`: group
+- `sh`: bezier path
+- `rc`: rectangle
+- `el`: ellipse
+- `sr`: polystar container
+- `fl`: solid fill
+- `gf`: gradient fill
+- `st`: solid stroke
+- `gs`: gradient stroke
+- `tm`: trim paths
+- `tr`: transform
+- `rp`: repeater
+- `mm`: merge paths
+- `rd`: round corners
+- `pb`: pucker and bloat
+- `op`: offset paths
+- `zz`: zig zag
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+For the `sr` polystar shape, the numeric `sy` mode values are:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `1`: star
+- `2`: polygon
 
-## Deploy on Vercel
+Related layer type numbers from the current schema are:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `0`: precomp layer
+- `1`: solid layer
+- `2`: image layer
+- `3`: null/helper layer
+- `4`: shape layer
+- `5`: text layer

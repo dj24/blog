@@ -1,26 +1,16 @@
 import invariant from "tiny-invariant";
 import { match, P } from "ts-pattern";
-import { type ZodType, z } from "zod";
+import type { ZodType } from "zod";
+import {
+  dotLottieManifestSchema,
+  type DotLottieArchive,
+  type DotLottieManifest,
+} from "./types/dotlottie";
+import { lottieCompositionSchema, type LottieComposition } from "./types/lottie-composition";
 
-export const lottieJsonSchema = z.record(z.string(), z.unknown());
-export const dotLottieAnimationSchema = z.object({
-  id: z.string(),
-});
-export const dotLottieManifestSchema = z.object({
-  version: z.string(),
-  author: z.string().optional(),
-  generator: z.string().optional(),
-  animations: z.array(dotLottieAnimationSchema),
-});
+export const lottieJsonSchema = lottieCompositionSchema;
 
-export type LottieJson = z.infer<typeof lottieJsonSchema>;
-export type DotLottieAnimation = z.infer<typeof dotLottieAnimationSchema>;
-export type DotLottieManifest = z.infer<typeof dotLottieManifestSchema>;
-
-export type DotLottieArchive = {
-  manifest: DotLottieManifest;
-  animations: Record<string, LottieJson>;
-};
+export type LottieJson = LottieComposition;
 
 type ZipFile = {
   name: string;
@@ -378,7 +368,7 @@ export const compressJsonToDotLottie = async (
   animation: LottieJson,
   options: {
     animationId?: string;
-    manifest?: Partial<Omit<DotLottieManifest, "animations">>;
+    manifest?: Partial<Pick<DotLottieManifest, "version" | "author" | "generator">>;
   } = {},
 ) => {
   const animationId = options.animationId ?? "main";
