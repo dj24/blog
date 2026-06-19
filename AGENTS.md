@@ -18,3 +18,4 @@ Each page can be considered a mini project. Check _plans folder in each when con
 - Component composition via children prop
 - No barrel files
 - Use named exports over default exports where possible
+- Use tiny-invariant in places where you throw based on an if statement
