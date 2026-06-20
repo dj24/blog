@@ -1,0 +1,1 @@
+Using the shape bounding boxes and the view position, we could render a small miro-esque mini map in the corner

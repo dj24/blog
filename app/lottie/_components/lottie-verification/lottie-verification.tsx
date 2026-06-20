@@ -5,7 +5,6 @@ import {
   compressJsonToDotLottie,
   decompressDotLottie,
   decompressDotLottieToJson,
-  parseLottieJson,
   readLottieJson,
 } from "../../_lib/dotlottie";
 import styles from "../../page.module.css";
@@ -36,8 +35,7 @@ type VerificationState =
       summary: VerificationSummary;
     };
 
-const dotLottieAssetUrl = "/lottie/assets/Gradient%20Text%20_%20Stacked.lottie";
-const jsonAssetUrl = "/lottie/assets/Gradient%20Text%20_%20Stacked.json";
+const dotLottieAssetUrl = "/lottie/assets/square.lottie";
 
 const checkRawDeflateStreamSupport = () => {
   return (
@@ -57,33 +55,35 @@ const checkRawDeflateStreamSupport = () => {
 };
 
 const getProjectSummary = async (): Promise<VerificationSummary> => {
-  const [dotLottieResponse, jsonResponse] = await Promise.all([
-    fetch(dotLottieAssetUrl),
-    fetch(jsonAssetUrl),
-  ]);
+  const dotLottieResponse = await fetch(dotLottieAssetUrl);
 
-  if (!dotLottieResponse.ok || !jsonResponse.ok) {
-    throw new Error("Unable to fetch the bundled Lottie assets.");
+  if (!dotLottieResponse.ok) {
+    throw new Error("Unable to fetch the bundled Lottie archive.");
   }
 
-  const [dotLottieFile, jsonFile] = await Promise.all([
-    dotLottieResponse.arrayBuffer(),
-    jsonResponse.text(),
-  ]);
-  const jsonAnimation = parseLottieJson(jsonFile);
-  const dotLottieAnimation = await decompressDotLottieToJson(dotLottieFile);
-  const recompressed = await compressJsonToDotLottie(jsonAnimation);
+  const dotLottieFile = await dotLottieResponse.arrayBuffer();
   const archive = await decompressDotLottie(dotLottieFile);
+  const animationId = archive.manifest.animations[0]?.id ?? "main";
+  const animation = await decompressDotLottieToJson(dotLottieFile, animationId);
+  const jsonFile = JSON.stringify(animation);
+  const recompressed = await compressJsonToDotLottie(animation, {
+    animationId,
+    manifest: {
+      author: archive.manifest.author,
+      generator: archive.manifest.generator,
+      version: archive.manifest.version,
+    },
+  });
   const recompressedAnimation = await decompressDotLottieToJson(recompressed);
-  const lotAnimation = await readLottieJson("Gradient Text _ Stacked.lot", jsonFile);
+  const lotAnimation = await readLottieJson("square.lot", jsonFile);
 
   return {
     animationCount: archive.manifest.animations.length,
     archiveBytes: dotLottieFile.byteLength,
     jsonBytes: new TextEncoder().encode(jsonFile).byteLength,
-    decompressionMatches: JSON.stringify(dotLottieAnimation) === JSON.stringify(jsonAnimation),
-    recompressionMatches: JSON.stringify(recompressedAnimation) === JSON.stringify(jsonAnimation),
-    lotMatches: JSON.stringify(lotAnimation) === JSON.stringify(jsonAnimation),
+    decompressionMatches: JSON.stringify(animation) === jsonFile,
+    recompressionMatches: JSON.stringify(recompressedAnimation) === jsonFile,
+    lotMatches: JSON.stringify(lotAnimation) === jsonFile,
   };
 };
 
@@ -214,7 +214,7 @@ export const LottieVerification = () => {
               <p className={styles.checkTitle}>DecompressionStream</p>
               <p className={styles.checkDescription}>
                 {summary.decompressionMatches
-                  ? "The browser extracts the bundled .lottie archive to the paired JSON file."
+                  ? "The browser extracts the bundled .lottie archive into the expected animation JSON."
                   : "Waiting for the browser to extract the bundled .lottie archive."}
               </p>
             </div>

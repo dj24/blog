@@ -200,6 +200,19 @@
   padding: 18px;
 }
 
+.dataCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.dataCardHeader::-webkit-details-marker {
+  display: none;
+}
+
 .dataCardTitle {
   font-size: 0.9rem;
   font-weight: 760;
@@ -260,6 +273,12 @@
   padding: 16px 18px;
   background: #f8f1e4;
   border-bottom: 1px solid #ded4c3;
+  cursor: pointer;
+  list-style: none;
+}
+
+.schemaSectionHeader::-webkit-details-marker {
+  display: none;
 }
 
 .schemaSectionTitle {
@@ -269,10 +288,40 @@
   text-transform: uppercase;
 }
 
+.sectionHeaderMeta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .schemaSectionBadge {
   color: #6d6252;
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.sectionToggleLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #6d6252;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sectionToggleLabel::before {
+  content: "▾";
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.dataCard:not([open]) .sectionToggleLabel::before,
+.schemaSection:not([open]) .sectionToggleLabel::before,
+.schemaBlock:not([open]) .sectionToggleLabel::before,
+.jsonCard:not([open]) .sectionToggleLabel::before {
+  content: "▸";
 }
 
 .schemaSectionBody {
@@ -283,10 +332,8 @@
 
 .schemaBlock {
   display: grid;
-  gap: 12px;
   border: 1px solid #ded4c3;
   background: #fffaf0;
-  padding: 16px;
 }
 
 .schemaBlock[data-depth="1"] {
@@ -306,6 +353,19 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  padding: 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.schemaBlockHeader::-webkit-details-marker {
+  display: none;
+}
+
+.schemaBlockBody {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
 }
 
 .schemaBlockTitle {
@@ -331,7 +391,7 @@
 
 .attributeRow {
   display: grid;
-  grid-template-columns: minmax(0, 140px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -359,6 +419,7 @@
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.83rem;
   line-height: 1.5;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
@@ -382,6 +443,12 @@
   border-top: 1px solid #ded4c3;
   border-bottom: 1px solid #ded4c3;
   padding: 16px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.jsonHeader::-webkit-details-marker {
+  display: none;
 }
 
 .jsonMeta {
@@ -429,9 +496,16 @@
 
   .jsonHeader,
   .dataHeader,
+  .dataCardHeader,
   .schemaSectionHeader,
   .schemaBlockHeader {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .sectionHeaderMeta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 }

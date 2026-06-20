@@ -21,4 +21,11 @@ Keyframes commonly include:
 - `i` / `o`: easing handles
 - `h`: hold flag
 
+In TypeScript, the shared model is exposed as a generic intersection:
+
+- `LottieKeyframe<TValue, TAttributeMetadata>`
+
+This lets us represent the common keyframe fields once, then layer in attribute-specific metadata
+for cases like path tangents or other exporter-specific per-keyframe fields.
+
 This property wrapper is one of the core patterns in the Lottie format.
