@@ -71,13 +71,11 @@
 .demo {
   display: grid;
   gap: 18px;
-  padding: clamp(18px, 3vw, 24px);
 }
 
 .demoCompact {
   gap: 16px;
   height: 100%;
-  padding: 18px;
 }
 
 .canvasFrame {
@@ -94,9 +92,8 @@
 
 .canvas {
   display: block;
-  width: 640px;
-  height: 640px;
   margin: 0 auto;
+  aspect-ratio: 1;
   background: #0f172a;
 }
 
@@ -106,8 +103,7 @@
 }
 
 .canvasCompact {
-  width: min(42vw, 560px);
-  height: min(42vw, 560px);
+  width: 100%
 }
 
 .statusRow {

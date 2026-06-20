@@ -100,8 +100,7 @@
 }
 
 .playerFrame {
-  aspect-ratio: 1;
-  border: 1px solid #1f2937;
+
   background:
     linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
     linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
@@ -116,11 +115,10 @@
 }
 
 .playerCanvas {
+  aspect-ratio: 1;
+  border: 1px solid #1f2937;
   display: block;
-  height: min(70vw, 560px);
-  max-height: 100%;
-  max-width: 100%;
-  width: min(70vw, 560px);
+  width: 100%;
 }
 
 .scrubberPanel {

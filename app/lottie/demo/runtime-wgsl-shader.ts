@@ -1,6 +1,7 @@
 import invariant from "tiny-invariant";
 import fullscreenTriangleSource from "./shaders/fullscreen_triangle.wgsl";
 import mainSource from "./shaders/main.wgsl";
+import sdfUtilsSource from "./shaders/sdf_utils.wgsl";
 import uvGradientSource from "./shaders/uv_gradient.wgsl";
 
 const getRawShaderSource = (source: unknown, label: string) => {
@@ -25,11 +26,14 @@ export const buildUvShaderSource = () => {
     fullscreenTriangleSource,
     "fullscreen_triangle.wgsl",
   );
+  const sdfUtils = getRawShaderSource(sdfUtilsSource, "sdf_utils.wgsl");
   const uvGradient = getRawShaderSource(uvGradientSource, "uv_gradient.wgsl");
   const main = getRawShaderSource(mainSource, "main.wgsl");
 
   return `
 ${fullscreenTriangle}
+
+${sdfUtils}
 
 ${uvGradient}
 

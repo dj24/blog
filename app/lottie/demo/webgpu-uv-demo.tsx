@@ -19,11 +19,7 @@ const getStatusClassName = (status: DemoStatus) => {
   return `${styles.status} ${styles.statusLoading}`;
 };
 
-export const WebGpuUvDemo = ({
-  compact = false,
-}: {
-  compact?: boolean;
-}) => {
+export const WebGpuUvDemo = ({ compact = false }: { compact?: boolean }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [status, setStatus] = useState<DemoStatus>("loading");
   const [statusMessage, setStatusMessage] = useState("Combining WGSL shader modules...");
@@ -119,7 +115,7 @@ export const WebGpuUvDemo = ({
       };
 
       setStatus("ready");
-      setStatusMessage("Rendering UV coordinates from combined WGSL source.");
+      setStatusMessage("Rendering a WebGPU SDF gallery from combined WGSL source.");
       animationFrameId = window.requestAnimationFrame(frame);
 
       return () => {
@@ -147,21 +143,15 @@ export const WebGpuUvDemo = ({
 
   return (
     <div className={compact ? `${styles.demo} ${styles.demoCompact}` : styles.demo}>
-      <div className={styles.statusRow}>
-        <span className={getStatusClassName(status)}>{statusMessage}</span>
-        <span className={styles.meta}>{resolutionLabel}</span>
-      </div>
-      <div className={compact ? `${styles.canvasFrame} ${styles.canvasFrameCompact}` : styles.canvasFrame}>
+      <div
+        className={
+          compact ? `${styles.canvasFrame} ${styles.canvasFrameCompact}` : styles.canvasFrame
+        }
+      >
         <canvas
           ref={canvasRef}
           className={compact ? `${styles.canvas} ${styles.canvasCompact}` : styles.canvas}
         />
-      </div>
-      <div className={styles.notes}>
-        <p>
-          The canvas shader is assembled by concatenating separate <code>.wgsl</code> files, then
-          the fragment stage writes <code>uv.x</code> into red and <code>uv.y</code> into green.
-        </p>
       </div>
     </div>
   );

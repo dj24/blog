@@ -66,7 +66,7 @@ const PlayerPage = async () => {
           <article className={styles.panel}>
             <div className={styles.panelHeader}>
               <h2 className={styles.panelTitle}>WebGPU Demo</h2>
-              <span className={styles.status}>UV Preview</span>
+              <span className={styles.status}>SDF Gallery</span>
             </div>
             <div className={styles.demoPanelBody}>
               <WebGpuUvDemo compact />

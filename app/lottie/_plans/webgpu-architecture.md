@@ -6,6 +6,72 @@ https://iquilezles.org/articles/distfunctions2d/
 The Lottie hierarchy needs to be traversed, resulting in a simpler struct for each primitive, so it can be loaded into a GPUBuffer.
 This will likely involve walking the tree and multiplying transforms together, but this needs to be fleshed-out further
 
+## What Actually Renders
+
+When serialising Lottie data for the GPU, not every parsed Lottie type needs a matching GPU struct.
+Many of the Lottie items exist to organise content, apply transforms, or modify geometry before the
+final drawable data is produced.
+
+The shape items that define drawable geometry in the current parser subset are:
+
+* `sh`: bezier path geometry
+* `rc`: rectangle geometry
+* `el`: ellipse geometry
+* `sr`: polystar geometry
+
+These are the items that directly contribute visible pixels:
+
+* `sh`
+* `rc`
+* `el`
+* `sr`
+
+The shape items that provide auxiliary paint data for geometry are:
+
+* `fl`: solid fill styling
+* `gf`: gradient fill styling
+* `st`: solid stroke styling
+* `gs`: gradient stroke styling
+
+These do not define visible geometry on their own, but they do determine how geometry is shaded
+once a drawable shape exists.
+
+The following items are not directly visible and should usually be resolved before upload:
+
+* `gr`: grouping and hierarchy
+* `tr`: shape-group transform
+* layer `ks`: layer transform
+* `tm`: trim paths modifier
+* `rp`: repeater modifier
+* `rd`: rounded corners modifier
+* `pb`: pucker and bloat modifier
+* `tw`: twist modifier
+* `mm`: merge paths modifier
+* `op`: offset paths modifier
+* `zz`: zig-zag modifier
+* `no`: explicit no-style marker
+
+At the layer level, content that can eventually produce visible pixels is:
+
+* shape layers
+* solid layers
+* image layers
+* text layers
+* precomp layers via their child layers
+
+Layers that are not directly visible:
+
+* null layers
+
+In practice, that means the GPU boundary should favour final drawables over raw Lottie nodes.
+Most Lottie data should be flattened into:
+
+* final geometry
+* final paint
+* final transform
+* final opacity
+* final draw order
+
 We should target a shared `64`-byte WGSL primitive struct for all instances in the main buffer.
 That gives us a fixed stride for storage-buffer indexing while still leaving enough room for a
 small header plus packed payload data.
@@ -39,9 +105,33 @@ In practice that means:
 * helper functions like `rectParams(prim)`, `ellipseParams(prim)`, `pathParams(prim)`, and
   `gradientParams(prim)` should unpack the shared layout into primitive-specific views.
 
-# Create Tile
+## Recommended GPU Split
+
+Rather than mirroring each Lottie type one-to-one on the GPU, the GPU-facing model should probably
+be reduced to:
+
+* `GpuPrimitive`: final geometry kind such as path, rect, ellipse, or polystar
+* `GpuPaint`: fill or stroke styling, including gradient metadata
+* `GpuInstance`: transform, opacity, bounds, and z-order
+* optional side buffers for variable-length data such as path segments or gradient stops
+
+That keeps most of the Lottie-specific complexity on the CPU side, where we can:
+
+* walk groups
+* multiply transforms
+* resolve parenting
+* apply path modifiers
+* expand repeaters
+* discard explicit non-rendering nodes
+
+The main question is whether repeaters should stay CPU-side or become a GPU instancing feature.
+Everything else listed above should default to CPU preprocessing unless there is a strong reason to
+keep it dynamic in shader code.
+
+# Create Tiles
  * Divide the screen into 32x32 tiles
  * Run each shape's bounding box function in a compute shader
+ * Dispatch one pass for each layer, so they are stacked in the right order
  * We could experiment with running the full sdf in this pass
  * If it overlaps that tile, add it to that tile's list via atomic counter
 

@@ -10,6 +10,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Each page can be considered a mini project. Check _plans folder in each when context is required.
 
+When making shader changes, open the page and inspect the rendered output to verify it looks as expected.
+
 # Code Style
 
 - Use arrow functions

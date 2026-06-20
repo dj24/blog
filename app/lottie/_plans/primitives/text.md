@@ -1,5 +1,9 @@
 # Text
 
+THIS WILL PROBABLY NOT GET USED
+
+It seems that editors commonly convert text to paths on the fly, so there is no reliance on system fonts
+
 ## Lottie Data
 
 - This primitive plan does not currently have a matching local `lottie-shape.ts` schema entry.
