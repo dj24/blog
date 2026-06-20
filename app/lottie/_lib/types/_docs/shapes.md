@@ -16,18 +16,16 @@ Inside a group, the current parser models:
 - `gf`: gradient fill
 - `st`: solid stroke
 - `gs`: gradient stroke
+- `no`: explicit no-style marker
 - `tm`: trim paths
-- `tr`: transform for that shape group
-
-The broader Lottie shape spec also includes additional shape operators that this repo does not
-currently model in `lottie-shape.ts`:
-
 - `rp`: repeater
-- `mm`: merge paths
 - `rd`: round corners
 - `pb`: pucker and bloat
+- `tw`: twist
+- `mm`: merge paths
 - `op`: offset paths
 - `zz`: zig zag
+- `tr`: transform for that shape group
 
 ## Group Transforms
 

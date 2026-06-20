@@ -11,15 +11,13 @@ import type {
   LottieVector2,
   LottieVector2Property,
 } from "../_lib/types/lottie-property";
-import type { KnownLottieShapeItem } from "./page";
+import type {
+  KnownLottieShapeItem,
+  PlaygroundImageSample,
+  PlaygroundTextSample,
+  ShapeSample,
+} from "./page";
 import styles from "./page.module.css";
-
-type ShapeSample = {
-  id: string;
-  label: string;
-  origin: string;
-  shape: KnownLottieShapeItem;
-};
 
 type EditableShape =
   | {
@@ -102,11 +100,61 @@ type EditableShape =
       bm?: number;
     }
   | {
+      ty: "no";
+      bm?: number;
+    }
+  | {
       ty: "tm";
       s: number;
       e: number;
       o: number;
       m?: number;
+    }
+  | {
+      ty: "rp";
+      c: number;
+      o: number;
+      m?: number;
+      tr: {
+        a?: LottieVector2;
+        p?: LottieVector2;
+        s?: LottieVector2;
+        r?: number;
+        o?: number;
+        sk?: number;
+        sa?: number;
+        so?: number;
+        eo?: number;
+      };
+    }
+  | {
+      ty: "rd";
+      r: number;
+    }
+  | {
+      ty: "pb";
+      a: number;
+    }
+  | {
+      ty: "tw";
+      a: number;
+      c: LottieVector2;
+    }
+  | {
+      ty: "mm";
+      mm: number;
+    }
+  | {
+      ty: "op";
+      a: number;
+      lj?: number;
+      ml?: number;
+    }
+  | {
+      ty: "zz";
+      r: number;
+      s: number;
+      pt: number;
     }
   | {
       ty: "tr";
@@ -116,6 +164,10 @@ type EditableShape =
       r?: number;
       o?: number;
     };
+
+type EditableTextLayer = PlaygroundTextSample;
+type EditableImageLayer = PlaygroundImageSample;
+type EditablePlaygroundItem = EditableShape | EditableTextLayer | EditableImageLayer;
 
 const canvasSize = 240;
 const previewCenter = canvasSize / 2;
@@ -153,25 +205,25 @@ const normalizeShape = (shape: KnownLottieShapeItem): EditableShape => {
     .with({ ty: "gr" }, (group) => ({
       ty: "gr",
       it: (group.it as KnownLottieShapeItem[]).map(normalizeShape),
-    } as EditableShape))
+    }) as EditableShape)
     .with({ ty: "sh" }, (pathShape) => ({
       ty: "sh",
       d: pathShape.d,
       ks: resolveBezierGeometry(pathShape.ks),
-    } as EditableShape))
+    }) as EditableShape)
     .with({ ty: "rc" }, (rectangle) => ({
       ty: "rc",
       d: rectangle.d,
       s: resolveVector2Property(rectangle.s),
       p: resolveVector2Property(rectangle.p),
       r: resolveNumberProperty(rectangle.r),
-    } as EditableShape))
+    }) as EditableShape)
     .with({ ty: "el" }, (ellipse) => ({
       ty: "el",
       d: ellipse.d,
       s: resolveVector2Property(ellipse.s),
       p: resolveVector2Property(ellipse.p),
-    } as EditableShape))
+    }) as EditableShape)
     .with({ ty: "sr" }, (polystar) => ({
       ty: "sr",
       sy: polystar.sy,
@@ -182,14 +234,14 @@ const normalizeShape = (shape: KnownLottieShapeItem): EditableShape => {
       r: resolveNumberProperty(polystar.r),
       ir: polystar.ir ? resolveNumberProperty(polystar.ir) : undefined,
       is: polystar.is ? resolveNumberProperty(polystar.is) : undefined,
-    } as EditableShape))
+    }) as EditableShape)
     .with({ ty: "fl" }, (fill) => ({
       ty: "fl",
       c: resolveColorProperty(fill.c),
       o: resolveNumberProperty(fill.o),
       r: fill.r,
       bm: fill.bm,
-    } as EditableShape))
+    }) as EditableShape)
     .with({ ty: "gf" }, (gradientFill) => ({
       ty: "gf",
       o: resolveNumberProperty(gradientFill.o),
@@ -202,7 +254,7 @@ const normalizeShape = (shape: KnownLottieShapeItem): EditableShape => {
       s: resolveVector2Property(gradientFill.s),
       e: resolveVector2Property(gradientFill.e),
       t: gradientFill.t,
-    } as EditableShape))
+    }) as EditableShape)
     .with({ ty: "st" }, (stroke) => ({
       ty: "st",
       c: resolveColorProperty(stroke.c),
@@ -212,7 +264,7 @@ const normalizeShape = (shape: KnownLottieShapeItem): EditableShape => {
       lj: stroke.lj,
       ml: stroke.ml,
       bm: stroke.bm,
-    } as EditableShape))
+    }) as EditableShape)
     .with({ ty: "gs" }, (gradientStroke) => ({
       ty: "gs",
       o: resolveNumberProperty(gradientStroke.o),
@@ -228,14 +280,64 @@ const normalizeShape = (shape: KnownLottieShapeItem): EditableShape => {
       lj: gradientStroke.lj,
       ml: gradientStroke.ml,
       bm: gradientStroke.bm,
-    } as EditableShape))
+    }) as EditableShape)
+    .with({ ty: "no" }, (noStyle) => ({
+      ty: "no",
+      bm: noStyle.bm,
+    }) as EditableShape)
     .with({ ty: "tm" }, (trim) => ({
       ty: "tm",
       s: resolveNumberProperty(trim.s),
       e: resolveNumberProperty(trim.e),
       o: resolveNumberProperty(trim.o),
       m: trim.m,
-    } as EditableShape))
+    }) as EditableShape)
+    .with({ ty: "rp" }, (repeater) => ({
+      ty: "rp",
+      c: resolveNumberProperty(repeater.c),
+      o: resolveNumberProperty(repeater.o),
+      m: repeater.m,
+      tr: {
+        a: repeater.tr.a ? resolveVector2Property(repeater.tr.a) : undefined,
+        p: repeater.tr.p ? resolveVector2Property(repeater.tr.p) : undefined,
+        s: repeater.tr.s ? resolveVector2Property(repeater.tr.s) : undefined,
+        r: repeater.tr.r ? resolveNumberProperty(repeater.tr.r) : undefined,
+        o: repeater.tr.o ? resolveNumberProperty(repeater.tr.o) : undefined,
+        sk: repeater.tr.sk ? resolveNumberProperty(repeater.tr.sk) : undefined,
+        sa: repeater.tr.sa ? resolveNumberProperty(repeater.tr.sa) : undefined,
+        so: repeater.tr.so ? resolveNumberProperty(repeater.tr.so) : undefined,
+        eo: repeater.tr.eo ? resolveNumberProperty(repeater.tr.eo) : undefined,
+      },
+    }) as EditableShape)
+    .with({ ty: "rd" }, (roundedCorners) => ({
+      ty: "rd",
+      r: resolveNumberProperty(roundedCorners.r),
+    }) as EditableShape)
+    .with({ ty: "pb" }, (puckerBloat) => ({
+      ty: "pb",
+      a: resolveNumberProperty(puckerBloat.a),
+    }) as EditableShape)
+    .with({ ty: "tw" }, (twist) => ({
+      ty: "tw",
+      a: resolveNumberProperty(twist.a),
+      c: resolveVector2Property(twist.c),
+    }) as EditableShape)
+    .with({ ty: "mm" }, (merge) => ({
+      ty: "mm",
+      mm: merge.mm,
+    }) as EditableShape)
+    .with({ ty: "op" }, (offsetPath) => ({
+      ty: "op",
+      a: resolveNumberProperty(offsetPath.a),
+      lj: offsetPath.lj,
+      ml: offsetPath.ml ? resolveNumberProperty(offsetPath.ml) : undefined,
+    }) as EditableShape)
+    .with({ ty: "zz" }, (zigZag) => ({
+      ty: "zz",
+      r: resolveNumberProperty(zigZag.r),
+      s: resolveNumberProperty(zigZag.s),
+      pt: resolveNumberProperty(zigZag.pt),
+    }) as EditableShape)
     .with({ ty: "tr" }, (transform) => ({
       ty: "tr",
       p: transform.p ? resolveVector2Property(transform.p) : undefined,
@@ -243,7 +345,15 @@ const normalizeShape = (shape: KnownLottieShapeItem): EditableShape => {
       s: transform.s ? resolveVector2Property(transform.s) : undefined,
       r: transform.r ? resolveNumberProperty(transform.r) : undefined,
       o: transform.o ? resolveNumberProperty(transform.o) : undefined,
-    } as EditableShape))
+    }) as EditableShape)
+    .exhaustive();
+};
+
+const normalizePlaygroundItem = (sample: ShapeSample): EditablePlaygroundItem => {
+  return match(sample)
+    .with({ kind: "shape" }, ({ shape }) => normalizeShape(shape))
+    .with({ kind: "text" }, ({ textLayer }) => textLayer)
+    .with({ kind: "image" }, ({ imageLayer }) => imageLayer)
     .exhaustive();
 };
 
@@ -405,9 +515,108 @@ const drawTrimArc = (
   context.arc(previewCenter, previewCenter, 76, start, end);
 };
 
-const renderShapePreview = (context: CanvasRenderingContext2D, shape: EditableShape) => {
-  drawAxis(context);
+const drawRepeaterPreview = (
+  context: CanvasRenderingContext2D,
+  repeater: Extract<EditableShape, { ty: "rp" }>,
+) => {
+  const copies = Math.max(1, Math.round(repeater.c));
+  const offset = repeater.o;
+  const stepX = repeater.tr.p?.[0] ?? 16;
+  const stepY = repeater.tr.p?.[1] ?? -10;
+  const rotation = ((repeater.tr.r ?? 0) * Math.PI) / 180;
+  const scaleX = (repeater.tr.s?.[0] ?? 100) / 100;
+  const scaleY = (repeater.tr.s?.[1] ?? 100) / 100;
+  const startOpacity = repeater.tr.so ?? 100;
+  const endOpacity = repeater.tr.eo ?? 20;
 
+  Array.from({ length: copies }, (_, index) => index).forEach((copyIndex) => {
+    const progress = copies === 1 ? 0 : copyIndex / (copies - 1);
+    const opacity = startOpacity + (endOpacity - startOpacity) * progress;
+
+    context.save();
+    context.translate(
+      previewCenter + (copyIndex + offset) * stepX,
+      previewCenter + (copyIndex + offset) * stepY,
+    );
+    context.rotate(rotation * copyIndex);
+    context.scale(scaleX ** copyIndex, scaleY ** copyIndex);
+    context.globalAlpha = opacity / 100;
+    drawRoundedRectPath(context, -30, -20, 60, 40, 12);
+    context.fillStyle = "rgba(61, 64, 91, 0.20)";
+    context.strokeStyle = "#3d405b";
+    context.lineWidth = 2;
+    context.fill();
+    context.stroke();
+    context.restore();
+  });
+};
+
+const drawTwistPreview = (
+  context: CanvasRenderingContext2D,
+  twist: Extract<EditableShape, { ty: "tw" }>,
+) => {
+  const spokes = 6;
+  const maxRadius = 72;
+
+  context.save();
+  context.strokeStyle = "#355070";
+  context.lineWidth = 3;
+
+  Array.from({ length: spokes }, (_, index) => index).forEach((spokeIndex) => {
+    const baseAngle = (spokeIndex / spokes) * Math.PI * 2;
+    context.beginPath();
+
+    Array.from({ length: 13 }, (_, step) => step).forEach((stepIndex) => {
+      const progress = stepIndex / 12;
+      const radius = progress * maxRadius;
+      const angle = baseAngle + (((twist.a * progress) / 180) * Math.PI) / 2;
+      const x = previewCenter + twist.c[0] + Math.cos(angle) * radius;
+      const y = previewCenter + twist.c[1] + Math.sin(angle) * radius;
+
+      if (stepIndex === 0) {
+        context.moveTo(x, y);
+        return;
+      }
+
+      context.lineTo(x, y);
+    });
+
+    context.stroke();
+  });
+
+  context.restore();
+};
+
+const drawZigZagPreview = (
+  context: CanvasRenderingContext2D,
+  zigZag: Extract<EditableShape, { ty: "zz" }>,
+) => {
+  const ridges = Math.max(2, Math.round(zigZag.r));
+  const amplitude = zigZag.s;
+
+  context.beginPath();
+
+  Array.from({ length: ridges + 1 }, (_, index) => index).forEach((ridgeIndex) => {
+    const x = 36 + (ridgeIndex / ridges) * 168;
+    const y = previewCenter + (ridgeIndex % 2 === 0 ? -amplitude / 2 : amplitude / 2);
+
+    if (ridgeIndex === 0) {
+      context.moveTo(x, y);
+      return;
+    }
+
+    if (zigZag.pt >= 2) {
+      const previousX = 36 + ((ridgeIndex - 1) / ridges) * 168;
+      const midpoint = (previousX + x) / 2;
+      context.quadraticCurveTo(midpoint, y, x, y);
+      return;
+    }
+
+    context.lineTo(x, y);
+  });
+};
+
+const renderShapePreview = (context: CanvasRenderingContext2D, shape: EditableShape) => {
   match(shape)
     .with({ ty: "gr" }, (group) => {
       if (group.it.length === 0) {
@@ -501,6 +710,19 @@ const renderShapePreview = (context: CanvasRenderingContext2D, shape: EditableSh
       context.stroke();
       context.globalAlpha = 1;
     })
+    .with({ ty: "no" }, () => {
+      drawRoundedRectPath(context, 48, 48, 144, 144, 26);
+      context.setLineDash([8, 8]);
+      context.strokeStyle = "#9c6644";
+      context.lineWidth = 2;
+      context.stroke();
+      context.setLineDash([]);
+      context.fillStyle = "#9c6644";
+      context.font = "600 14px monospace";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText("no fill / no stroke", previewCenter, previewCenter);
+    })
     .with({ ty: "tm" }, (trim) => {
       context.strokeStyle = "rgba(212, 163, 115, 0.28)";
       context.lineWidth = 18;
@@ -509,6 +731,77 @@ const renderShapePreview = (context: CanvasRenderingContext2D, shape: EditableSh
       context.stroke();
       context.strokeStyle = "#7f5539";
       drawTrimArc(context, trim);
+      context.stroke();
+    })
+    .with({ ty: "rp" }, (repeater) => {
+      drawRepeaterPreview(context, repeater);
+    })
+    .with({ ty: "rd" }, (roundedCorners) => {
+      drawRoundedRectPath(context, 48, 48, 144, 144, roundedCorners.r);
+      context.fillStyle = "rgba(77, 144, 142, 0.22)";
+      context.strokeStyle = "#4d908e";
+      context.lineWidth = 3;
+      context.fill();
+      context.stroke();
+    })
+    .with({ ty: "pb" }, (puckerBloat) => {
+      drawPolystarPath(context, {
+        ty: "sr",
+        sy: 1,
+        pt: 8,
+        p: [0, 0],
+        or: 48 + puckerBloat.a / 3,
+        os: 0,
+        r: -14,
+        ir: clamp(54 - puckerBloat.a / 2, 10, 60),
+        is: 0,
+      });
+      context.fillStyle = "rgba(69, 123, 157, 0.20)";
+      context.strokeStyle = "#457b9d";
+      context.lineWidth = 3;
+      context.fill();
+      context.stroke();
+    })
+    .with({ ty: "tw" }, (twist) => {
+      drawTwistPreview(context, twist);
+    })
+    .with({ ty: "mm" }, (merge) => {
+      context.fillStyle = "rgba(230, 57, 70, 0.22)";
+      context.beginPath();
+      context.arc(96, 120, 44, 0, Math.PI * 2);
+      context.arc(144, 120, 44, 0, Math.PI * 2);
+      context.fill();
+      context.strokeStyle = "#9d0208";
+      context.lineWidth = 2;
+      context.stroke();
+      context.fillStyle = "#9d0208";
+      context.font = "600 13px monospace";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(`mode ${merge.mm}`, previewCenter, 196);
+    })
+    .with({ ty: "op" }, (offsetPath) => {
+      Array.from({ length: 3 }, (_, index) => index).forEach((ringIndex) => {
+        drawRoundedRectPath(
+          context,
+          66 - ringIndex * (offsetPath.a / 3),
+          66 - ringIndex * (offsetPath.a / 3),
+          108 + ringIndex * ((offsetPath.a / 3) * 2),
+          108 + ringIndex * ((offsetPath.a / 3) * 2),
+          20,
+        );
+        context.strokeStyle = ringIndex === 0 ? "#6d597a" : "rgba(109, 89, 122, 0.45)";
+        context.lineWidth = 3;
+        context.lineJoin = offsetPath.lj === 3 ? "bevel" : offsetPath.lj === 2 ? "round" : "miter";
+        context.miterLimit = offsetPath.ml ?? 4;
+        context.stroke();
+      });
+    })
+    .with({ ty: "zz" }, (zigZag) => {
+      drawZigZagPreview(context, zigZag);
+      context.strokeStyle = "#4361ee";
+      context.lineWidth = 4;
+      context.lineJoin = zigZag.pt >= 2 ? "round" : "miter";
       context.stroke();
     })
     .with({ ty: "tr" }, (transform) => {
@@ -529,7 +822,84 @@ const renderShapePreview = (context: CanvasRenderingContext2D, shape: EditableSh
     .exhaustive();
 };
 
-const ShapePreviewCanvas = ({ shape }: { shape: EditableShape }) => {
+const renderTextPreview = (
+  context: CanvasRenderingContext2D,
+  textLayer: EditableTextLayer,
+) => {
+  context.save();
+  context.font = `600 ${textLayer.fontSize}px ${textLayer.fontFamily}`;
+  context.fillStyle = toCssColor(textLayer.color, textLayer.opacity);
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(
+    textLayer.text,
+    previewCenter + textLayer.position[0],
+    previewCenter + textLayer.position[1],
+    canvasSize - 32,
+  );
+  context.restore();
+};
+
+const drawImageFallback = (context: CanvasRenderingContext2D) => {
+  drawRoundedRectPath(context, 44, 66, 152, 108, 24);
+  context.fillStyle = "rgba(56, 102, 65, 0.12)";
+  context.strokeStyle = "#386641";
+  context.lineWidth = 2;
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#386641";
+  context.font = "600 14px monospace";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText("image unavailable", previewCenter, previewCenter);
+};
+
+const renderImagePreview = (
+  context: CanvasRenderingContext2D,
+  imageLayer: EditableImageLayer,
+  imageElement: HTMLImageElement,
+) => {
+  const width = clamp(imageLayer.width, 24, canvasSize - 24);
+  const height = clamp(imageLayer.height, 24, canvasSize - 24);
+  const x = previewCenter + imageLayer.position[0] - width / 2;
+  const y = previewCenter + imageLayer.position[1] - height / 2;
+
+  context.save();
+  drawRoundedRectPath(context, x, y, width, height, 20);
+  context.clip();
+  context.globalAlpha = imageLayer.opacity / 100;
+  context.drawImage(imageElement, x, y, width, height);
+  context.restore();
+
+  context.save();
+  drawRoundedRectPath(context, x, y, width, height, 20);
+  context.strokeStyle = "rgba(56, 102, 65, 0.45)";
+  context.lineWidth = 2;
+  context.stroke();
+  context.restore();
+};
+
+const drawPreviewBackground = (context: CanvasRenderingContext2D) => {
+  context.clearRect(0, 0, canvasSize, canvasSize);
+  context.fillStyle = "#fffaf0";
+  context.fillRect(0, 0, canvasSize, canvasSize);
+  drawAxis(context);
+};
+
+const loadPreviewImage = (src: string) => {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      resolve(image);
+    };
+    image.onerror = () => {
+      reject(new Error(`Unable to load preview image: ${src}`));
+    };
+    image.src = src;
+  });
+};
+
+const PreviewCanvas = ({ item }: { item: EditablePlaygroundItem }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -545,11 +915,45 @@ const ShapePreviewCanvas = ({ shape }: { shape: EditableShape }) => {
       return;
     }
 
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#fffaf0";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    renderShapePreview(context, shape);
-  }, [shape]);
+    let cancelled = false;
+
+    const renderPreview = async () => {
+      drawPreviewBackground(context);
+
+      await match(item)
+        .with({ ty: "image" }, async (imageLayer) => {
+          try {
+            const imageElement = await loadPreviewImage(imageLayer.src);
+
+            if (cancelled) {
+              return;
+            }
+
+            drawPreviewBackground(context);
+            renderImagePreview(context, imageLayer, imageElement);
+          } catch {
+            if (cancelled) {
+              return;
+            }
+
+            drawPreviewBackground(context);
+            drawImageFallback(context);
+          }
+        })
+        .with({ ty: "text" }, async (textLayer) => {
+          renderTextPreview(context, textLayer);
+        })
+        .otherwise(async (shape) => {
+          renderShapePreview(context, shape);
+        });
+    };
+
+    void renderPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [item]);
 
   return (
     <canvas
@@ -669,6 +1073,30 @@ const ColorField = ({
   );
 };
 
+const TextField = ({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (nextValue: string) => void;
+}) => {
+  return (
+    <Field label={label}>
+      <input
+        className={styles.input}
+        type="text"
+        value={value}
+        onChange={(event) => {
+          onChange(event.currentTarget.value);
+        }}
+      />
+      <span className={styles.fieldValue}>{value.length} chars</span>
+    </Field>
+  );
+};
+
 const Vector2Fields = ({
   label,
   value,
@@ -738,7 +1166,7 @@ const ShapeControls = ({
   setShape,
 }: {
   shape: EditableShape;
-  setShape: React.Dispatch<React.SetStateAction<EditableShape>>;
+  setShape: (nextValue: EditableShape) => void;
 }) => {
   return match(shape)
     .with({ ty: "gr" }, (group) => (
@@ -1026,6 +1454,18 @@ const ShapeControls = ({
         <GradientStopsReadout stopCount={gradientStroke.g.p} values={gradientStroke.g.k} />
       </>
     ))
+    .with({ ty: "no" }, (noStyle) => (
+      <div className={styles.metaList}>
+        <div className={styles.metaRow}>
+          <span className={styles.metaLabel}>style</span>
+          <span className={styles.metaValue}>no fill or stroke</span>
+        </div>
+        <div className={styles.metaRow}>
+          <span className={styles.metaLabel}>bm blend mode</span>
+          <span className={styles.metaValue}>{noStyle.bm ?? "n/a"}</span>
+        </div>
+      </div>
+    ))
     .with({ ty: "tm" }, (trim) => (
       <>
         <NumberField
@@ -1053,6 +1493,172 @@ const ShapeControls = ({
           max={100}
           onChange={(nextValue) => {
             setShape({ ...trim, o: nextValue });
+          }}
+        />
+      </>
+    ))
+    .with({ ty: "rp" }, (repeater) => (
+      <>
+        <NumberField
+          label="c copies"
+          value={repeater.c}
+          min={1}
+          max={10}
+          onChange={(nextValue) => {
+            setShape({ ...repeater, c: nextValue });
+          }}
+        />
+        <NumberField
+          label="o offset"
+          value={repeater.o}
+          min={-3}
+          max={3}
+          onChange={(nextValue) => {
+            setShape({ ...repeater, o: nextValue });
+          }}
+        />
+        <Vector2Fields
+          label="tr position"
+          value={repeater.tr.p ?? [16, -10]}
+          min={-40}
+          max={40}
+          onChange={(nextValue) => {
+            setShape({ ...repeater, tr: { ...repeater.tr, p: nextValue } });
+          }}
+        />
+        <Vector2Fields
+          label="tr scale"
+          value={repeater.tr.s ?? [100, 100]}
+          min={40}
+          max={140}
+          onChange={(nextValue) => {
+            setShape({ ...repeater, tr: { ...repeater.tr, s: nextValue } });
+          }}
+        />
+        <NumberField
+          label="tr rotation"
+          value={repeater.tr.r ?? 0}
+          min={-45}
+          max={45}
+          onChange={(nextValue) => {
+            setShape({ ...repeater, tr: { ...repeater.tr, r: nextValue } });
+          }}
+        />
+      </>
+    ))
+    .with({ ty: "rd" }, (roundedCorners) => (
+      <NumberField
+        label="r radius"
+        value={roundedCorners.r}
+        min={0}
+        max={72}
+        onChange={(nextValue) => {
+          setShape({ ...roundedCorners, r: nextValue });
+        }}
+      />
+    ))
+    .with({ ty: "pb" }, (puckerBloat) => (
+      <NumberField
+        label="a amount"
+        value={puckerBloat.a}
+        min={-100}
+        max={100}
+        onChange={(nextValue) => {
+          setShape({ ...puckerBloat, a: nextValue });
+        }}
+      />
+    ))
+    .with({ ty: "tw" }, (twist) => (
+      <>
+        <NumberField
+          label="a angle"
+          value={twist.a}
+          min={-360}
+          max={360}
+          onChange={(nextValue) => {
+            setShape({ ...twist, a: nextValue });
+          }}
+        />
+        <Vector2Fields
+          label="c center"
+          value={twist.c}
+          min={-60}
+          max={60}
+          onChange={(nextValue) => {
+            setShape({ ...twist, c: nextValue });
+          }}
+        />
+      </>
+    ))
+    .with({ ty: "mm" }, (merge) => (
+      <NumberField
+        label="mm mode"
+        value={merge.mm}
+        min={1}
+        max={5}
+        onChange={(nextValue) => {
+          setShape({ ...merge, mm: nextValue });
+        }}
+      />
+    ))
+    .with({ ty: "op" }, (offsetPath) => (
+      <>
+        <NumberField
+          label="a amount"
+          value={offsetPath.a}
+          min={0}
+          max={36}
+          onChange={(nextValue) => {
+            setShape({ ...offsetPath, a: nextValue });
+          }}
+        />
+        <NumberField
+          label="lj join"
+          value={offsetPath.lj ?? 1}
+          min={1}
+          max={3}
+          onChange={(nextValue) => {
+            setShape({ ...offsetPath, lj: nextValue });
+          }}
+        />
+        <NumberField
+          label="ml miter"
+          value={offsetPath.ml ?? 4}
+          min={1}
+          max={12}
+          onChange={(nextValue) => {
+            setShape({ ...offsetPath, ml: nextValue });
+          }}
+        />
+      </>
+    ))
+    .with({ ty: "zz" }, (zigZag) => (
+      <>
+        <NumberField
+          label="r frequency"
+          value={zigZag.r}
+          min={2}
+          max={16}
+          onChange={(nextValue) => {
+            setShape({ ...zigZag, r: nextValue });
+          }}
+        />
+        <NumberField
+          label="s amplitude"
+          value={zigZag.s}
+          min={4}
+          max={40}
+          onChange={(nextValue) => {
+            setShape({ ...zigZag, s: nextValue });
+          }}
+        />
+        <NumberField
+          label="pt point type"
+          value={zigZag.pt}
+          min={1}
+          max={2}
+          onChange={(nextValue) => {
+            setShape({ ...zigZag, pt: nextValue });
           }}
         />
       </>
@@ -1109,22 +1715,171 @@ const ShapeControls = ({
     .exhaustive();
 };
 
+const TextControls = ({
+  textLayer,
+  setTextLayer,
+}: {
+  textLayer: EditableTextLayer;
+  setTextLayer: (nextValue: EditableTextLayer) => void;
+}) => {
+  return (
+    <>
+      <TextField
+        label="t content"
+        value={textLayer.text}
+        onChange={(nextValue) => {
+          setTextLayer({ ...textLayer, text: nextValue });
+        }}
+      />
+      <NumberField
+        label="s font size"
+        value={textLayer.fontSize}
+        min={20}
+        max={96}
+        onChange={(nextValue) => {
+          setTextLayer({ ...textLayer, fontSize: nextValue });
+        }}
+      />
+      <Vector2Fields
+        label="p position"
+        value={textLayer.position}
+        min={-90}
+        max={90}
+        onChange={(nextValue) => {
+          setTextLayer({ ...textLayer, position: nextValue });
+        }}
+      />
+      <ColorField
+        label="c color"
+        value={textLayer.color}
+        onChange={(nextValue) => {
+          setTextLayer({ ...textLayer, color: nextValue });
+        }}
+      />
+      <NumberField
+        label="o opacity"
+        value={textLayer.opacity}
+        min={0}
+        max={100}
+        onChange={(nextValue) => {
+          setTextLayer({ ...textLayer, opacity: nextValue });
+        }}
+      />
+      <div className={styles.metaList}>
+        <div className={styles.metaRow}>
+          <span className={styles.metaLabel}>font family</span>
+          <span className={styles.metaValue}>{textLayer.fontFamily}</span>
+        </div>
+      </div>
+    </>
+  );
+};
+
+const ImageControls = ({
+  imageLayer,
+  setImageLayer,
+}: {
+  imageLayer: EditableImageLayer;
+  setImageLayer: (nextValue: EditableImageLayer) => void;
+}) => {
+  return (
+    <>
+      <NumberField
+        label="w width"
+        value={imageLayer.width}
+        min={24}
+        max={200}
+        onChange={(nextValue) => {
+          setImageLayer({ ...imageLayer, width: nextValue });
+        }}
+      />
+      <NumberField
+        label="h height"
+        value={imageLayer.height}
+        min={24}
+        max={200}
+        onChange={(nextValue) => {
+          setImageLayer({ ...imageLayer, height: nextValue });
+        }}
+      />
+      <Vector2Fields
+        label="p position"
+        value={imageLayer.position}
+        min={-90}
+        max={90}
+        onChange={(nextValue) => {
+          setImageLayer({ ...imageLayer, position: nextValue });
+        }}
+      />
+      <NumberField
+        label="o opacity"
+        value={imageLayer.opacity}
+        min={0}
+        max={100}
+        onChange={(nextValue) => {
+          setImageLayer({ ...imageLayer, opacity: nextValue });
+        }}
+      />
+      <div className={styles.metaList}>
+        <div className={styles.metaRow}>
+          <span className={styles.metaLabel}>alt</span>
+          <span className={styles.metaValue}>{imageLayer.alt}</span>
+        </div>
+      </div>
+    </>
+  );
+};
+
+const PlaygroundControls = ({
+  item,
+  setItem,
+}: {
+  item: EditablePlaygroundItem;
+  setItem: React.Dispatch<React.SetStateAction<EditablePlaygroundItem>>;
+}) => {
+  return match(item)
+    .with({ ty: "text" }, (textLayer) => (
+      <TextControls
+        textLayer={textLayer}
+        setTextLayer={(nextValue) => {
+          setItem(nextValue);
+        }}
+      />
+    ))
+    .with({ ty: "image" }, (imageLayer) => (
+      <ImageControls
+        imageLayer={imageLayer}
+        setImageLayer={(nextValue) => {
+          setItem(nextValue);
+        }}
+      />
+    ))
+    .otherwise((shape) => (
+      <ShapeControls
+        shape={shape}
+        setShape={(nextValue) => {
+          setItem(nextValue);
+        }}
+      />
+    ));
+};
+
 const ShapeCard = ({ sample }: { sample: ShapeSample }) => {
-  const [shape, setShape] = useState<EditableShape>(() => normalizeShape(sample.shape));
+  const [item, setItem] = useState<EditablePlaygroundItem>(() => normalizePlaygroundItem(sample));
 
   return (
     <article className={styles.card}>
       <div className={styles.cardHeader}>
         <div>
-          <p className={styles.cardEyebrow}>{sample.shape.ty}</p>
+          <p className={styles.cardEyebrow}>{item.ty}</p>
           <h3 className={styles.cardTitle}>{sample.label}</h3>
         </div>
         <span className={styles.cardBadge}>{sample.origin}</span>
       </div>
       <div className={styles.cardBody}>
-        <ShapePreviewCanvas shape={shape} />
+        <PreviewCanvas item={item} />
         <div className={styles.controls}>
-          <ShapeControls shape={shape} setShape={setShape} />
+          <PlaygroundControls item={item} setItem={setItem} />
         </div>
       </div>
     </article>

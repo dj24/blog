@@ -2,3 +2,4 @@
 * WebGPU
 * shadcn
 * Party Kit
+* WESL

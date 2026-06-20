@@ -38,7 +38,15 @@ export const lottieShapeItemSchema: z.ZodTypeAny = z.lazy(() =>
     lottieGradientFillShapeSchema,
     lottieStrokeShapeSchema,
     lottieGradientStrokeShapeSchema,
+    lottieNoStyleShapeSchema,
     lottieTrimPathShapeSchema,
+    lottieRepeaterShapeSchema,
+    lottieRoundedCornersShapeSchema,
+    lottiePuckerBloatShapeSchema,
+    lottieTwistShapeSchema,
+    lottieMergeShapeSchema,
+    lottieOffsetPathShapeSchema,
+    lottieZigZagShapeSchema,
     lottieTransformShapeSchema,
   ]),
 );
@@ -216,6 +224,17 @@ export const lottieGradientStrokeShapeSchema = z
 
 export type LottieGradientStrokeShape = z.infer<typeof lottieGradientStrokeShapeSchema>;
 
+export const lottieNoStyleShapeSchema = z
+  .object({
+    /** Explicitly indicates that the shape has no fill or stroke style. */
+    ty: z.literal("no"),
+    /** Blend mode identifier. */
+    bm: z.number().optional(),
+  })
+  .catchall(z.unknown());
+
+export type LottieNoStyleShape = z.infer<typeof lottieNoStyleShapeSchema>;
+
 export const lottieTrimPathShapeSchema = z
   .object({
     /** Trim paths item type. */
@@ -232,6 +251,124 @@ export const lottieTrimPathShapeSchema = z
   .catchall(z.unknown());
 
 export type LottieTrimPathShape = z.infer<typeof lottieTrimPathShapeSchema>;
+
+export const lottieRepeaterTransformSchema = z
+  .object({
+    /** Anchor point used for repeated transforms. */
+    a: lottieVector2PropertySchema.optional(),
+    /** Position offset applied to each repeated copy. */
+    p: lottieVector2PropertySchema.optional(),
+    /** Scale percentages for each repeated copy. */
+    s: lottieVector2PropertySchema.optional(),
+    /** Rotation in degrees for each repeated copy. */
+    r: lottieNumberPropertySchema.optional(),
+    /** Overall opacity percentage. */
+    o: lottieNumberPropertySchema.optional(),
+    /** Skew amount in degrees. */
+    sk: lottieNumberPropertySchema.optional(),
+    /** Skew axis in degrees. */
+    sa: lottieNumberPropertySchema.optional(),
+    /** Start opacity percentage for the first copy. */
+    so: lottieNumberPropertySchema.optional(),
+    /** End opacity percentage for the last copy. */
+    eo: lottieNumberPropertySchema.optional(),
+  })
+  .catchall(z.unknown());
+
+export type LottieRepeaterTransform = z.infer<typeof lottieRepeaterTransformSchema>;
+
+export const lottieRepeaterShapeSchema = z
+  .object({
+    /** Repeater modifier item type. */
+    ty: z.literal("rp"),
+    /** Number of copies. */
+    c: lottieNumberPropertySchema,
+    /** Offset applied before the first repeated copy. */
+    o: lottieNumberPropertySchema,
+    /** Composite order identifier. */
+    m: z.number().optional(),
+    /** Transform applied to each copy. */
+    tr: lottieRepeaterTransformSchema,
+  })
+  .catchall(z.unknown());
+
+export type LottieRepeaterShape = z.infer<typeof lottieRepeaterShapeSchema>;
+
+export const lottieRoundedCornersShapeSchema = z
+  .object({
+    /** Rounded corners modifier item type. */
+    ty: z.literal("rd"),
+    /** Radius applied to affected corners. */
+    r: lottieNumberPropertySchema,
+  })
+  .catchall(z.unknown());
+
+export type LottieRoundedCornersShape = z.infer<typeof lottieRoundedCornersShapeSchema>;
+
+export const lottiePuckerBloatShapeSchema = z
+  .object({
+    /** Pucker / bloat modifier item type. */
+    ty: z.literal("pb"),
+    /** Amount as a percentage. */
+    a: lottieNumberPropertySchema,
+  })
+  .catchall(z.unknown());
+
+export type LottiePuckerBloatShape = z.infer<typeof lottiePuckerBloatShapeSchema>;
+
+export const lottieTwistShapeSchema = z
+  .object({
+    /** Twist modifier item type. */
+    ty: z.literal("tw"),
+    /** Twist angle in degrees. */
+    a: lottieNumberPropertySchema,
+    /** Twist center point. */
+    c: lottieVector2PropertySchema,
+  })
+  .catchall(z.unknown());
+
+export type LottieTwistShape = z.infer<typeof lottieTwistShapeSchema>;
+
+export const lottieMergeShapeSchema = z
+  .object({
+    /** Merge-paths modifier item type. */
+    ty: z.literal("mm"),
+    /** Merge mode identifier. */
+    mm: z.number(),
+  })
+  .catchall(z.unknown());
+
+export type LottieMergeShape = z.infer<typeof lottieMergeShapeSchema>;
+
+export const lottieOffsetPathShapeSchema = z
+  .object({
+    /** Offset-path modifier item type. */
+    ty: z.literal("op"),
+    /** Offset amount. */
+    a: lottieNumberPropertySchema,
+    /** Line join style identifier. */
+    lj: z.number().optional(),
+    /** Miter limit used for sharp joins. */
+    ml: lottieNumberPropertySchema.optional(),
+  })
+  .catchall(z.unknown());
+
+export type LottieOffsetPathShape = z.infer<typeof lottieOffsetPathShapeSchema>;
+
+export const lottieZigZagShapeSchema = z
+  .object({
+    /** Zig-zag modifier item type. */
+    ty: z.literal("zz"),
+    /** Number of ridges per segment. */
+    r: lottieNumberPropertySchema,
+    /** Distance between peaks and troughs. */
+    s: lottieNumberPropertySchema,
+    /** Point type identifier. */
+    pt: lottieNumberPropertySchema,
+  })
+  .catchall(z.unknown());
+
+export type LottieZigZagShape = z.infer<typeof lottieZigZagShapeSchema>;
 
 export const lottieTransformShapeSchema = z
   .object({
