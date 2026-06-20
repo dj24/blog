@@ -1,14 +1,11 @@
 import { match } from "ts-pattern";
-import {
-  createEmptyGpuShapeRecord,
-  gpuShapeKinds,
-  type GpuShapeRecord,
-} from "./gpu-shape-record";
+import { createEmptyGpuShapeRecord, gpuShapeKinds, type GpuShapeRecord } from "./gpu-shape-record";
 import type { LottieComposition } from "./types/lottie-composition";
 import type { LottieShapeLayer, LottieTransform } from "./types/lottie-layer";
 import type {
   LottieColor,
   LottieGradientStopValues,
+  LottieKeyframe,
   LottieNumberProperty,
   LottieProperty,
   LottieVector2,
@@ -51,6 +48,8 @@ const defaultPaint: Paint = {
   color: [1, 1, 1],
   opacity: 1,
 };
+const cubicBezierEpsilon = 0.000001;
+const cubicBezierIterations = 8;
 
 const multiplyMatrices = (left: Matrix2d, right: Matrix2d): Matrix2d => {
   return [
@@ -113,8 +112,143 @@ const hasShapeType = (item: unknown): item is ShapeItemWithType => {
   return typeof item === "object" && item !== null && "ty" in item && typeof item.ty === "string";
 };
 
+const clamp = (value: number, min: number, max: number) => {
+  return Math.min(Math.max(value, min), max);
+};
+
+const cubicBezier = (a: number, b: number, c: number, d: number, t: number) => {
+  const inverseT = 1 - t;
+
+  return (
+    inverseT * inverseT * inverseT * a +
+    3 * inverseT * inverseT * t * b +
+    3 * inverseT * t * t * c +
+    t * t * t * d
+  );
+};
+
+const cubicBezierDerivative = (a: number, b: number, c: number, d: number, t: number) => {
+  const inverseT = 1 - t;
+
+  return 3 * inverseT * inverseT * (b - a) + 6 * inverseT * t * (c - b) + 3 * t * t * (d - c);
+};
+
+const bezierComponentFrom = (value: number | number[] | undefined, fallback: number) => {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value[0] ?? fallback;
+  }
+
+  return fallback;
+};
+
+const cubicBezierProgress = ({
+  x1,
+  y1,
+  x2,
+  y2,
+  progress,
+}: {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  progress: number;
+}) => {
+  let lower = 0;
+  let upper = 1;
+  let t = clamp(progress, 0, 1);
+
+  for (let iteration = 0; iteration < cubicBezierIterations; iteration += 1) {
+    const slope = cubicBezierDerivative(0, x1, x2, 1, t);
+
+    if (Math.abs(slope) < cubicBezierEpsilon) {
+      break;
+    }
+
+    const x = cubicBezier(0, x1, x2, 1, t) - progress;
+
+    if (Math.abs(x) < cubicBezierEpsilon) {
+      return clamp(cubicBezier(0, y1, y2, 1, t), 0, 1);
+    }
+
+    t -= x / slope;
+  }
+
+  t = clamp(t, 0, 1);
+
+  for (let iteration = 0; iteration < cubicBezierIterations; iteration += 1) {
+    const x = cubicBezier(0, x1, x2, 1, t);
+
+    if (Math.abs(x - progress) < cubicBezierEpsilon) {
+      break;
+    }
+
+    if (x < progress) {
+      lower = t;
+    } else {
+      upper = t;
+    }
+
+    t = (lower + upper) / 2;
+  }
+
+  return clamp(cubicBezier(0, y1, y2, 1, t), 0, 1);
+};
+
+const isNumberArray = (value: unknown): value is number[] => {
+  return Array.isArray(value) && value.every((item) => typeof item === "number");
+};
+
+const interpolateNumber = (from: number, to: number, progress: number) => {
+  return from + (to - from) * progress;
+};
+
+const interpolateArray = <TValue extends number[]>(from: TValue, to: TValue, progress: number) => {
+  return from.map((value, index) =>
+    interpolateNumber(value, to[index] ?? value, progress),
+  ) as TValue;
+};
+
+const interpolateValue = <TValue>(from: TValue, to: TValue, progress: number): TValue => {
+  if (typeof from === "number" && typeof to === "number") {
+    return interpolateNumber(from, to, progress) as TValue;
+  }
+
+  if (isNumberArray(from) && isNumberArray(to)) {
+    if (from.length !== to.length) {
+      return from;
+    }
+
+    return interpolateArray(from, to, progress) as TValue;
+  }
+
+  return from;
+};
+
+const easingProgressFrom = <TValue>(
+  keyframe: LottieKeyframe<TValue, Record<string, unknown>>,
+  progress: number,
+) => {
+  const x1 = bezierComponentFrom(keyframe.o?.x, 0);
+  const y1 = bezierComponentFrom(keyframe.o?.y, 0);
+  const x2 = bezierComponentFrom(keyframe.i?.x, 1);
+  const y2 = bezierComponentFrom(keyframe.i?.y, 1);
+
+  return cubicBezierProgress({
+    x1: clamp(x1, 0, 1),
+    y1,
+    x2: clamp(x2, 0, 1),
+    y2,
+    progress: clamp(progress, 0, 1),
+  });
+};
+
 const evaluateProperty = <TValue>(
-  property: LottieProperty<TValue, Record<string, unknown>> | undefined,
+  property: LottieProperty<TValue> | undefined,
   frame: number,
 ): TValue | undefined => {
   if (!property) {
@@ -125,12 +259,44 @@ const evaluateProperty = <TValue>(
     return property.k;
   }
 
-  const keyframe =
-    property.k
-      .filter((candidate) => candidate.t <= frame)
-      .at(-1) ?? property.k[0];
+  const firstKeyframe = property.k[0];
 
-  return keyframe?.s;
+  if (!firstKeyframe) {
+    return undefined;
+  }
+
+  if (frame < firstKeyframe.t) {
+    return firstKeyframe.s;
+  }
+
+  for (let index = 0; index < property.k.length; index += 1) {
+    const keyframe = property.k[index];
+    const nextKeyframe = property.k[index + 1];
+    const finalValue = keyframe.e ?? nextKeyframe?.s ?? keyframe.s;
+
+    if (!nextKeyframe) {
+      return finalValue;
+    }
+
+    if (frame < nextKeyframe.t) {
+      if (keyframe.h) {
+        return keyframe.s;
+      }
+
+      const segmentDuration = nextKeyframe.t - keyframe.t;
+
+      if (segmentDuration <= 0) {
+        return finalValue;
+      }
+
+      const linearProgress = clamp((frame - keyframe.t) / segmentDuration, 0, 1);
+      const easedProgress = easingProgressFrom(keyframe, linearProgress);
+
+      return interpolateValue(keyframe.s, finalValue, easedProgress);
+    }
+  }
+
+  return firstKeyframe.s;
 };
 
 const vector2From = (
@@ -144,7 +310,11 @@ const vector2From = (
   return [value[0], value[1]];
 };
 
-const numberFrom = (property: LottieNumberProperty | undefined, frame: number, fallback: number) => {
+const numberFrom = (
+  property: LottieNumberProperty | undefined,
+  frame: number,
+  fallback: number,
+) => {
   return evaluateProperty(property, frame) ?? fallback;
 };
 

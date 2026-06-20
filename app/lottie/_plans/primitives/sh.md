@@ -1,5 +1,10 @@
 # Bezier Path
 
+Bezier paths will be stored in a separate buffer due to their varying length
+
+The Gpu Shape struct will contain the usual indirection metadata to look this up, such as the start offset, vertex count, etc
+
+
 ## Lottie Data
 
 - `ty: "sh"`: shape discriminator.

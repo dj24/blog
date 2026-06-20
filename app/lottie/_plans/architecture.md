@@ -1,6 +1,11 @@
 # Architecture
 
 ## GPU Snapshot
-The rendering code is responsible for rendering a snapshot of data passed to it, with no knowledge of application state.
+The rendering code is responsible for rendering a snapshot of data passed to it, with no knowledge of the application state.
 
-Animations will be handled on the CPU, interpolating and serialising data to be sent to the GPU. This means that animation and scrubbing can be rendered with the same GPU pipelines.
+## CPU Flattening
+Each frame, the lottie tree will be walked and flattened into one GPU struct.
+
+This way the shader can apply all modifications to a shape in one pass
+
+Interpolation will also happen as part of the flattening process, getting the current value of attributes based on their keyframes and the current frame being rendered.
