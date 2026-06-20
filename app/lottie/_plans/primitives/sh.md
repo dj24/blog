@@ -1,5 +1,37 @@
 # Bezier Path
 
+## Lottie Data
+
+- `ty: "sh"`: shape discriminator.
+- `d?`: exporter direction metadata.
+- `ks`: animated bezier path geometry property.
+- Path geometry value data:
+- `c`: whether the path is closed.
+- `v`: absolute vertex positions.
+- `i`: incoming tangent offsets for each vertex.
+- `o`: outgoing tangent offsets for each vertex.
+- Other data: unknown exporter-specific fields may also be present.
+
+## Animated Attributes
+
+- Animatable attributes here: `ks`.
+- Lottie stores animatable properties as either `{ a: 0, k, ix? }` or `{ a: 1, k: [keyframes...], ix? }`.
+- `a`: whether the property is animated.
+- `k`: the static path geometry value or the ordered keyframe array.
+- `ix?`: exporter property index.
+
+## Per-Keyframe Data
+
+- `t`: frame where the keyframe starts.
+- `s`: start path geometry for the segment.
+- `e?`: optional end path geometry for the segment.
+- `i?`: incoming easing handle.
+- `o?`: outgoing easing handle.
+- `h?`: hold flag.
+- `i.x`, `i.y`, `o.x`, `o.y`: easing handle coordinates, each stored as either a number or an array of numbers.
+- For path animation, the `s` and `e` values themselves contain `c`, `v`, `i`, and `o`.
+- Other data: keyframes can also carry exporter-specific extra fields.
+
 Sources:
 - https://iquilezles.org/articles/distfunctions2d/
 - https://iquilezles.org/articles/bboxes2d/

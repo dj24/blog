@@ -19,7 +19,11 @@ const getStatusClassName = (status: DemoStatus) => {
   return `${styles.status} ${styles.statusLoading}`;
 };
 
-export const WebGpuUvDemo = () => {
+export const WebGpuUvDemo = ({
+  compact = false,
+}: {
+  compact?: boolean;
+}) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [status, setStatus] = useState<DemoStatus>("loading");
   const [statusMessage, setStatusMessage] = useState("Combining WGSL shader modules...");
@@ -142,13 +146,16 @@ export const WebGpuUvDemo = () => {
   }, []);
 
   return (
-    <div className={styles.demo}>
+    <div className={compact ? `${styles.demo} ${styles.demoCompact}` : styles.demo}>
       <div className={styles.statusRow}>
         <span className={getStatusClassName(status)}>{statusMessage}</span>
         <span className={styles.meta}>{resolutionLabel}</span>
       </div>
-      <div className={styles.canvasFrame}>
-        <canvas ref={canvasRef} className={styles.canvas} />
+      <div className={compact ? `${styles.canvasFrame} ${styles.canvasFrameCompact}` : styles.canvasFrame}>
+        <canvas
+          ref={canvasRef}
+          className={compact ? `${styles.canvas} ${styles.canvasCompact}` : styles.canvas}
+        />
       </div>
       <div className={styles.notes}>
         <p>

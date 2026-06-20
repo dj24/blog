@@ -17,6 +17,7 @@
 .navigationContent {
   margin: 0 auto;
   padding: 1rem 0;
+  width: min(1120px, calc(100vw - 1.25rem));
 }
 
 @media (max-width: 640px) {

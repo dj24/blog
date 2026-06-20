@@ -20,11 +20,6 @@ const lottieSubpages = [
     label: "Shapes",
     segment: "shapes",
   },
-  {
-    href: "/lottie/demo",
-    label: "WebGPU Demo",
-    segment: "demo",
-  },
 ] as const;
 
 export const LottieSubpageNavigation = () => {

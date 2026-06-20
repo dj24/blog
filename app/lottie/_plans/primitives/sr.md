@@ -1,5 +1,37 @@
 # Polystar
 
+## Lottie Data
+
+- `ty: "sr"`: shape discriminator.
+- `sy?`: mode identifier, commonly `1` for star and `2` for polygon.
+- `pt`: point count as an animatable number.
+- `p`: position as an animatable `vec2`.
+- `or`: outer radius as an animatable number.
+- `os`: outer roundness percentage as an animatable number.
+- `r`: rotation as an animatable number.
+- `ir?`: inner radius as an optional animatable number.
+- `is?`: inner roundness percentage as an optional animatable number.
+- Other data: unknown exporter-specific fields may also be present.
+
+## Animated Attributes
+
+- Animatable attributes here: `pt`, `p`, `or`, `os`, `r`, `ir?`, `is?`.
+- Lottie stores animatable properties as either `{ a: 0, k, ix? }` or `{ a: 1, k: [keyframes...], ix? }`.
+- `a`: whether the property is animated.
+- `k`: the static value or the ordered keyframe array.
+- `ix?`: exporter property index.
+
+## Per-Keyframe Data
+
+- `t`: frame where the keyframe starts.
+- `s`: start value for the segment.
+- `e?`: optional end value for the segment.
+- `i?`: incoming easing handle.
+- `o?`: outgoing easing handle.
+- `h?`: hold flag.
+- `i.x`, `i.y`, `o.x`, `o.y`: easing handle coordinates, each stored as either a number or an array of numbers.
+- Other data: keyframes can also carry exporter-specific extra fields.
+
 Sources:
 - https://iquilezles.org/articles/distfunctions2d/
 - https://iquilezles.org/articles/bboxes2d/
