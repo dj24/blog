@@ -3,7 +3,14 @@ import type { NextConfig } from "next";
 import { env } from "./env";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  turbopack: {
+    rules: {
+      "*.wgsl": {
+        loaders: ["./wgsl-loader.cjs"],
+        as: "*.js",
+      },
+    },
+  },
 };
 
 const withBundleAnalyzer = bundleAnalyzer({

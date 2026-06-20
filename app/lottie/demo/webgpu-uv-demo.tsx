@@ -2,36 +2,10 @@
 
 import invariant from "tiny-invariant";
 import { useEffect, useRef, useState } from "react";
+import { buildUvShaderSource } from "./runtime-wgsl-shader";
 import styles from "./page.module.css";
 
 type DemoStatus = "loading" | "ready" | "error";
-
-const shaderCode = /* wgsl */ `
-struct VertexOutput {
-  @builtin(position) position: vec4<f32>,
-  @location(0) uv: vec2<f32>,
-}
-
-@vertex
-fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-  var positions = array<vec2<f32>, 3>(
-    vec2<f32>(-1.0, -3.0),
-    vec2<f32>(-1.0, 1.0),
-    vec2<f32>(3.0, 1.0),
-  );
-
-  var output: VertexOutput;
-  let position = positions[vertexIndex];
-  output.position = vec4<f32>(position, 0.0, 1.0);
-  output.uv = position * 0.5 + vec2<f32>(0.5, 0.5);
-  return output;
-}
-
-@fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-  return vec4<f32>(input.uv, 0.0, 1.0);
-}
-`;
 
 const getStatusClassName = (status: DemoStatus) => {
   if (status === "ready") {
@@ -48,7 +22,7 @@ const getStatusClassName = (status: DemoStatus) => {
 export const WebGpuUvDemo = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [status, setStatus] = useState<DemoStatus>("loading");
-  const [statusMessage, setStatusMessage] = useState("Requesting GPU adapter...");
+  const [statusMessage, setStatusMessage] = useState("Combining WGSL shader modules...");
   const [resolutionLabel, setResolutionLabel] = useState("Awaiting canvas setup");
 
   useEffect(() => {
@@ -74,6 +48,7 @@ export const WebGpuUvDemo = () => {
 
       const device = await adapter.requestDevice();
       const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
+      const shaderCode = buildUvShaderSource();
       const shaderModule = device.createShaderModule({ code: shaderCode });
       const renderPipeline = device.createRenderPipeline({
         layout: "auto",
@@ -140,7 +115,7 @@ export const WebGpuUvDemo = () => {
       };
 
       setStatus("ready");
-      setStatusMessage("Rendering UV coordinates directly in the fragment shader.");
+      setStatusMessage("Rendering UV coordinates from combined WGSL source.");
       animationFrameId = window.requestAnimationFrame(frame);
 
       return () => {
@@ -150,9 +125,14 @@ export const WebGpuUvDemo = () => {
 
     let cleanupResizeObserver: (() => void) | undefined;
 
-    run().then((cleanup) => {
-      cleanupResizeObserver = cleanup;
-    });
+    run()
+      .then((cleanup) => {
+        cleanupResizeObserver = cleanup;
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Unknown WGSL setup error.";
+        reportError(message);
+      });
 
     return () => {
       disposed = true;
@@ -172,8 +152,8 @@ export const WebGpuUvDemo = () => {
       </div>
       <div className={styles.notes}>
         <p>
-          The fragment shader writes <code>uv.x</code> into red and <code>uv.y</code> into green
-          directly from a fullscreen triangle, with no compute pass or intermediate texture.
+          The canvas shader is assembled by concatenating separate <code>.wgsl</code> files, then
+          the fragment stage writes <code>uv.x</code> into red and <code>uv.y</code> into green.
         </p>
       </div>
     </div>
