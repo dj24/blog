@@ -390,31 +390,6 @@ const Page = async () => {
 
   return (
     <main className={styles.page}>
-      <section className={styles.hero}>
-        <p className={styles.eyebrow}>phase 2</p>
-        <h1 className={styles.title}>Lottie shape rendering</h1>
-        <p className={styles.summary}>
-          Each modeled shape item, plus synthetic text and image layer references, gets its own
-          isolated canvas preview, a branch-specific renderer, and editable controls resolved from
-          the first available property value.
-        </p>
-        <div className={styles.stats}>
-          <div className={styles.stat}>
-            <span className={styles.statLabel}>playground items</span>
-            <span className={styles.statValue}>{shapeSamples.length}</span>
-          </div>
-          <div className={styles.stat}>
-            <span className={styles.statLabel}>sample assets</span>
-            <span className={styles.statValue}>{assetPaths.length}</span>
-          </div>
-          <div className={styles.stat}>
-            <span className={styles.statLabel}>fallbacks used</span>
-            <span className={styles.statValue}>
-              {shapeSamples.filter((sample) => sample.origin === "synthetic fallback").length}
-            </span>
-          </div>
-        </div>
-      </section>
       <section className={styles.panel}>
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>shape playground</h2>

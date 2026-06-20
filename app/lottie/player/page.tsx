@@ -53,16 +53,6 @@ const PlayerPage = async () => {
   return (
     <main className={styles.page}>
       <div className={styles.content}>
-        <header className={styles.hero}>
-          <span className={styles.eyebrow}>Lottie Player</span>
-          <h1 className={styles.title}>Square, ready for frame-by-frame inspection.</h1>
-          <p className={styles.summary}>
-            This page uses <code>@lottiefiles/dotlottie-react</code> to load the repo&apos;s
-            <code> square.lottie</code> asset, pauses it by default, and gives you a scrubber for
-            checking exact frames without custom runtime glue.
-          </p>
-        </header>
-
         <section className={styles.layout}>
           <article className={styles.panel}>
             <div className={styles.panelHeader}>

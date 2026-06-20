@@ -1,6 +1,8 @@
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
+import { LottieSubpageNavigation } from "./_components/lottie-subpage-navigation/lottie-subpage-navigation";
 import { isLottieRouteVisible } from "./_lib/lottie-route-visibility";
+import styles from "./layout.module.css";
 
 const LottieLayout = async ({
   children,
@@ -13,7 +15,16 @@ const LottieLayout = async ({
     redirect("/");
   }
 
-  return children;
+  return (
+    <div className={styles.shell}>
+      <div className={styles.navigationBar}>
+        <div className={styles.navigationContent}>
+          <LottieSubpageNavigation />
+        </div>
+      </div>
+      <div className={styles.pageContent}>{children}</div>
+    </div>
+  );
 };
 
 export default LottieLayout;

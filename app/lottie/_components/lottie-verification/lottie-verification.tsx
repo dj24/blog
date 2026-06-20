@@ -178,12 +178,6 @@ export const LottieVerification = () => {
   return (
     <>
       <section className={styles.hero}>
-        <p className={styles.eyebrow}>phase 1</p>
-        <h1 className={styles.title}>Lottie compression</h1>
-        <p className={styles.summary}>
-          A dependency-free converter for unpacking dotLottie archives into raw animation JSON and
-          packing JSON back into a valid dotLottie file in the browser.
-        </p>
         <div className={styles.stats}>
           <div className={styles.stat}>
             <span className={styles.statLabel}>animations</span>
