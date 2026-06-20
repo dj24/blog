@@ -1,3 +1,4 @@
+# Canvas
 * Each possible [shape](../_lib/types/_docs/shapes.md) should be renderable in isolation
 * Have a simple page that displays a canvas rendering just that object at identity matrix (no transform)
 * Have controls alongside each shape that corresponds to each of the shape attributes
