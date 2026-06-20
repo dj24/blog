@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { QueryProvider } from "./_components/query-provider";
 import "./globals.css";
-import {Analytics} from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,8 +25,10 @@ const RootLayout = ({
 }>) => {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <Analytics/>
-      <body>{children}</body>
+      <body>
+        <QueryProvider>{children}</QueryProvider>
+        <Analytics />
+      </body>
     </html>
   );
 };

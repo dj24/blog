@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { LottieVerification } from "./lottie-verification/lottie-verification";
 import { decompressDotLottie } from "../_lib/dotlottie";
 import type { LottieAsset } from "../_lib/types/lottie-asset";
@@ -114,11 +114,6 @@ type LottiePageData = {
   manifest: DotLottieManifest;
   prettyAnimationJson: string;
 };
-
-type LottiePageState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | ({ status: "ready" } & LottiePageData);
 
 const getLottiePageData = async (): Promise<LottiePageData> => {
   const dotLottieResponse = await fetch(dotLottieAssetUrl);
@@ -356,41 +351,15 @@ const SchemaSection = ({
 };
 
 export const LottiePageClient = () => {
-  const [state, setState] = useState<LottiePageState>({ status: "loading" });
+  const lottiePageQuery = useQuery({
+    queryKey: ["lottie-page-data", dotLottieAssetUrl],
+    queryFn: getLottiePageData,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadPageData = async () => {
-      try {
-        const pageData = await getLottiePageData();
-
-        if (!cancelled) {
-          setState({
-            status: "ready",
-            ...pageData,
-          });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setState({
-            status: "error",
-            message: error instanceof Error ? error.message : "Unable to load Lottie page data.",
-          });
-        }
-      }
-    };
-
-    void loadPageData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const readyState = state.status === "ready" ? state : null;
+  const readyState = lottiePageQuery.data ?? null;
   const animation = readyState?.animation;
-  const manifest = readyState?.manifest;
+  const manifest = readyState?.manifest ?? null;
   const compositionAttributes = animation
     ? getAttributeEntries(animation, ["assets", "layers"])
     : [];
@@ -403,16 +372,27 @@ export const LottiePageClient = () => {
           <div className={styles.dataHeader}>
             <h2 className={styles.dataTitle}>parsed lottie data</h2>
             <span className={styles.dataBadge}>
-              {readyState?.animationId ?? (state.status === "error" ? "error" : "loading")}
+              {readyState?.animationId ??
+                (lottiePageQuery.isError
+                  ? "error"
+                  : lottiePageQuery.isPending
+                    ? "loading"
+                    : "idle")}
             </span>
           </div>
-          {state.status === "error" ? <p className={styles.notice}>{state.message}</p> : null}
-          {state.status === "loading" ? (
+          {lottiePageQuery.isError ? (
+            <p className={styles.notice}>
+              {lottiePageQuery.error instanceof Error
+                ? lottiePageQuery.error.message
+                : "Unable to load Lottie page data."}
+            </p>
+          ) : null}
+          {lottiePageQuery.isPending ? (
             <p className={styles.notice}>
               Loading the bundled square.lottie archive in the browser...
             </p>
           ) : null}
-          {readyState ? (
+          {readyState && manifest && animation ? (
             <>
               <div className={styles.dataGrid}>
                 <details className={styles.dataCard}>

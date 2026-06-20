@@ -86,7 +86,11 @@
     linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
     linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
-  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+  background-position:
+    0 0,
+    0 12px,
+    12px -12px,
+    -12px 0;
   background-size: 24px 24px;
 }
 
@@ -94,16 +98,16 @@
   display: block;
   margin: 0 auto;
   aspect-ratio: 1;
-  background: #0f172a;
+  background: transparent;
 }
 
 .canvasFrameCompact {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
 }
 
 .canvasCompact {
-  width: 100%
+  width: 100%;
 }
 
 .statusRow {

@@ -4,7 +4,7 @@ import path from "node:path";
 import invariant from "tiny-invariant";
 import { DotlottiePlayer } from "./_components/dotlottie-player/dotlottie-player";
 import { decompressDotLottie } from "../_lib/dotlottie";
-import { WebGpuUvDemo } from "../demo/webgpu-uv-demo";
+import { WebGpuShapeDemo } from "../demo/webgpu-shape-demo";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
@@ -65,11 +65,11 @@ const PlayerPage = async () => {
 
           <article className={styles.panel}>
             <div className={styles.panelHeader}>
-              <h2 className={styles.panelTitle}>WebGPU Demo</h2>
-              <span className={styles.status}>Hardcoded Rectangle</span>
+              <h2 className={styles.panelTitle}>WebGPU Shape Demo</h2>
+              <span className={styles.status}>GPU Snapshot</span>
             </div>
             <div className={styles.demoPanelBody}>
-              <WebGpuUvDemo compact />
+              <WebGpuShapeDemo compact />
             </div>
           </article>
         </section>

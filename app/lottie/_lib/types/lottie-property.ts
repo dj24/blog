@@ -45,7 +45,7 @@ export type LottieKeyframe<
 
 export const createLottieKeyframeSchema = <
   TValue extends z.ZodType,
-  TAttributeMetadataShape extends z.ZodRawShape = {},
+  TAttributeMetadataShape extends z.ZodRawShape = Record<string, never>,
 >(
   valueSchema: TValue,
   attributeMetadataShape?: TAttributeMetadataShape,
@@ -110,7 +110,7 @@ export const createLottieStaticPropertySchema = <TValue extends z.ZodType>(value
 
 export const createLottieAnimatedPropertySchema = <
   TValue extends z.ZodType,
-  TAttributeMetadataShape extends z.ZodRawShape = {},
+  TAttributeMetadataShape extends z.ZodRawShape = Record<string, never>,
 >(
   valueSchema: TValue,
   attributeMetadataShape?: TAttributeMetadataShape,
@@ -129,7 +129,7 @@ export const createLottieAnimatedPropertySchema = <
 
 export const createLottiePropertySchema = <
   TValue extends z.ZodType,
-  TAttributeMetadataShape extends z.ZodRawShape = {},
+  TAttributeMetadataShape extends z.ZodRawShape = Record<string, never>,
 >(
   valueSchema: TValue,
   attributeMetadataShape?: TAttributeMetadataShape,

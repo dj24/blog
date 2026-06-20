@@ -1,4 +1,5 @@
 const SHAPE_KIND_RECTANGLE: u32 = 1u;
+const SHAPE_KIND_ELLIPSE: u32 = 2u;
 
 struct DemoUniforms {
   activeShapeIndex: u32,
@@ -51,11 +52,7 @@ fn shape_local_point(shape: ShapeRecord, pixel_pos: vec2f) -> vec2f {
 }
 
 fn shape_color(shape: ShapeRecord) -> vec3f {
-  if (shape.kind == SHAPE_KIND_RECTANGLE) {
-    return vec3f(0.95, 0.55, 0.31);
-  }
-
-  return vec3f(1.0, 0.25, 0.75);
+  return clamp(vec3f(shape.fillRed, shape.fillGreen, shape.fillBlue), vec3f(0.0), vec3f(1.0));
 }
 
 fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
@@ -73,6 +70,12 @@ fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
     return sd_box(local_p, half_size);
   }
 
+  if (shape.kind == SHAPE_KIND_ELLIPSE) {
+    let radii = max(vec2f(shape.radiusX, shape.radiusY), vec2f(1.0, 1.0));
+
+    return sd_ellipse(local_p, radii);
+  }
+
   return 1e6;
 }
 
@@ -85,7 +88,7 @@ fn render_active_shape(pixel_pos: vec2f) -> vec4f {
   let local_p = shape_local_point(shape, pixel_pos);
   let aa_width = max(length(fwidth(local_p)) * 0.5, 0.75);
   let sd = evaluate_shape_sdf(shape, local_p);
-  let alpha = fill_from_sdf(sd, aa_width) * clamp(shape.opacity, 0.0, 1.0);
+  let alpha = fill_from_sdf(sd, aa_width) * clamp(shape.opacity * shape.fillAlpha, 0.0, 1.0);
 
   return vec4f(shape_color(shape), alpha);
 }

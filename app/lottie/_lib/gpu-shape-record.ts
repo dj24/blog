@@ -43,6 +43,10 @@ export type GpuShapeRecord = {
   scaleY: number;
   rotation: number;
   opacity: number;
+  fillRed: number;
+  fillGreen: number;
+  fillBlue: number;
+  fillAlpha: number;
   centerX: number;
   centerY: number;
   width: number;
@@ -102,6 +106,11 @@ struct ShapeRecord {
   scaleY: f32,
   rotation: f32,
   opacity: f32,
+
+  fillRed: f32,
+  fillGreen: f32,
+  fillBlue: f32,
+  fillAlpha: f32,
 
   centerX: f32,
   centerY: f32,
@@ -182,6 +191,10 @@ const gpuShapeRecordFieldLayout = [
   { field: "scaleY", type: "f32" },
   { field: "rotation", type: "f32" },
   { field: "opacity", type: "f32" },
+  { field: "fillRed", type: "f32" },
+  { field: "fillGreen", type: "f32" },
+  { field: "fillBlue", type: "f32" },
+  { field: "fillAlpha", type: "f32" },
   { field: "centerX", type: "f32" },
   { field: "centerY", type: "f32" },
   { field: "width", type: "f32" },
@@ -241,6 +254,10 @@ export const createEmptyGpuShapeRecord = (): GpuShapeRecord => {
     scaleY: 1,
     rotation: 0,
     opacity: 1,
+    fillRed: 1,
+    fillGreen: 1,
+    fillBlue: 1,
+    fillAlpha: 1,
     centerX: 0,
     centerY: 0,
     width: 0,

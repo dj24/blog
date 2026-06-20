@@ -3,7 +3,7 @@ import { gpuShapeRecordWgsl } from "../_lib/gpu-shape-record";
 import fullscreenTriangleSource from "./shaders/fullscreen_triangle.wgsl";
 import mainSource from "./shaders/main.wgsl";
 import sdfUtilsSource from "./shaders/sdf_utils.wgsl";
-import uvGradientSource from "./shaders/uv_gradient.wgsl";
+import shapeRenderSource from "./shaders/shape_render.wgsl";
 
 const getRawShaderSource = (source: unknown, label: string) => {
   if (typeof source === "string") {
@@ -22,13 +22,13 @@ const getRawShaderSource = (source: unknown, label: string) => {
   invariant(false, `${label} did not load as a raw string.`);
 };
 
-export const buildUvShaderSource = () => {
+export const buildShapeDemoShaderSource = () => {
   const fullscreenTriangle = getRawShaderSource(
     fullscreenTriangleSource,
     "fullscreen_triangle.wgsl",
   );
   const sdfUtils = getRawShaderSource(sdfUtilsSource, "sdf_utils.wgsl");
-  const uvGradient = getRawShaderSource(uvGradientSource, "uv_gradient.wgsl");
+  const shapeRender = getRawShaderSource(shapeRenderSource, "shape_render.wgsl");
   const main = getRawShaderSource(mainSource, "main.wgsl");
 
   return `
@@ -38,7 +38,7 @@ ${sdfUtils}
 
 ${gpuShapeRecordWgsl}
 
-${uvGradient}
+${shapeRender}
 
 ${main}
 `.trim();
