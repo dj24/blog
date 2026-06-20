@@ -1,76 +1,91 @@
+const SHAPE_KIND_RECTANGLE: u32 = 1u;
+
+struct DemoUniforms {
+  activeShapeIndex: u32,
+  shapeCount: u32,
+  reserved: vec2u,
+  canvasResolution: vec2f,
+  compositionResolution: vec2f,
+}
+
+@group(0) @binding(1) var<uniform> demoUniforms: DemoUniforms;
+
 fn fill_from_sdf(sd: f32, aa_width: f32) -> f32 {
-  let aa = max(aa_width, 0.003);
+  let aa = max(aa_width, 0.75);
   return 1.0 - smoothstep(-aa, aa, sd);
 }
 
-fn stroke_from_distance(distance_to_curve: f32, half_width: f32, aa_width: f32) -> f32 {
-  let edge = distance_to_curve - half_width;
-  let aa = max(aa_width, 0.003);
-  return 1.0 - smoothstep(-aa, aa, edge);
-}
+fn rotate_point(p: vec2f, angle_radians: f32) -> vec2f {
+  let sine = sin(angle_radians);
+  let cosine = cos(angle_radians);
 
-fn cell_background(local_uv: vec2f) -> vec3f {
-  let grid = 0.08 * (1.0 - smoothstep(0.0, 0.01, abs(fract(local_uv.x * 5.0) - 0.5) * 2.0));
-  let cross = 0.08 * (1.0 - smoothstep(0.0, 0.01, abs(fract(local_uv.y * 5.0) - 0.5) * 2.0));
-  return vec3f(0.08, 0.1, 0.14) + vec3f(grid + cross);
-}
-
-fn render_shape(cell_index: u32, p: vec2f, aa_width: f32) -> vec4f {
-  if (cell_index == 0u) {
-    let sd = sd_box(p, vec2f(0.42, 0.28));
-    return vec4f(vec3f(0.95, 0.55, 0.31), fill_from_sdf(sd, aa_width));
-  }
-
-  if (cell_index == 1u) {
-    let sd = sd_rounded_box(p, vec2f(0.4, 0.28), vec4f(0.14, 0.08, 0.2, 0.12));
-    return vec4f(vec3f(0.95, 0.79, 0.29), fill_from_sdf(sd, aa_width));
-  }
-
-  if (cell_index == 2u) {
-    let sd = sd_ellipse(p, vec2f(0.38, 0.28));
-    return vec4f(vec3f(0.26, 0.85, 0.67), fill_from_sdf(sd, aa_width));
-  }
-
-  if (cell_index == 3u) {
-    let sd = sd_star(p * vec2f(1.0, -1.0), 0.38, 5, 2.5);
-    return vec4f(vec3f(0.39, 0.67, 0.98), fill_from_sdf(sd, aa_width));
-  }
-
-  if (cell_index == 4u) {
-    let base_sd = sd_star(p * vec2f(1.0, -1.0), 0.38, 5, 2.5);
-    let sd = op_round(base_sd, 0.12);
-    return vec4f(vec3f(0.79, 0.53, 0.97), fill_from_sdf(sd, aa_width));
-  }
-
-  let curve_distance = sd_quadratic_bezier(
-    p,
-    vec2f(-0.46, 0.26),
-    vec2f(0.0, -0.32),
-    vec2f(0.46, 0.22),
+  return vec2f(
+    p.x * cosine - p.y * sine,
+    p.x * sine + p.y * cosine,
   );
-  let alpha = stroke_from_distance(curve_distance, 0.035, aa_width);
-  return vec4f(vec3f(0.98, 0.44, 0.58), alpha);
 }
 
-fn fragmentMainImpl(input: VertexOutput) -> vec4<f32> {
-  let uv = clamp(input.uv, vec2f(0.0), vec2f(0.9999));
-  let cols = 2.0;
-  let rows = 3.0;
-  let grid_uv = vec2f(uv.x * cols, uv.y * rows);
-  let cell = floor(grid_uv);
-  let cell_index = u32(cell.y) * 2u + u32(cell.x);
-  let local_uv = fract(grid_uv);
-  let local_p = (local_uv - 0.5) * vec2f(1.7, -1.7);
-  let aa_width = length(fwidth(local_p)) * 0.5;
+fn composition_position_from_canvas(pixel_pos: vec2f) -> vec2f {
+  let safe_canvas = max(demoUniforms.canvasResolution, vec2f(1.0, 1.0));
+  let safe_composition = max(demoUniforms.compositionResolution, vec2f(1.0, 1.0));
 
-  var color = cell_background(local_uv);
-  let shape = render_shape(cell_index, local_p, aa_width);
-  color = mix(color, shape.rgb, shape.a);
+  return vec2f(
+    (pixel_pos.x / safe_canvas.x) * safe_composition.x,
+    (1.0 - pixel_pos.y / safe_canvas.y) * safe_composition.y,
+  );
+}
 
-  let border_x = 1.0 - smoothstep(0.0, 0.02, min(local_uv.x, 1.0 - local_uv.x));
-  let border_y = 1.0 - smoothstep(0.0, 0.02, min(local_uv.y, 1.0 - local_uv.y));
-  let border = max(border_x, border_y) * 0.35;
-  color = mix(color, vec3f(0.94, 0.96, 0.99), border);
+fn shape_local_point(shape: ShapeRecord, pixel_pos: vec2f) -> vec2f {
+  let composition_pos = composition_position_from_canvas(pixel_pos);
+  let shape_center = vec2f(
+    shape.centerX + shape.positionX,
+    shape.centerY + shape.positionY,
+  );
+  let safe_scale = max(vec2f(abs(shape.scaleX), abs(shape.scaleY)), vec2f(0.0001, 0.0001));
+  var local_p = composition_pos - shape_center;
 
-  return vec4f(color, 1.0);
+  local_p = rotate_point(local_p, -radians(shape.rotation));
+  local_p = vec2f(local_p.x / safe_scale.x, local_p.y / safe_scale.y);
+
+  return vec2f(local_p.x, -local_p.y);
+}
+
+fn shape_color(shape: ShapeRecord) -> vec3f {
+  if (shape.kind == SHAPE_KIND_RECTANGLE) {
+    return vec3f(0.95, 0.55, 0.31);
+  }
+
+  return vec3f(1.0, 0.25, 0.75);
+}
+
+fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
+  if (shape.kind == SHAPE_KIND_RECTANGLE) {
+    let half_size = max(vec2f(shape.width, shape.height) * 0.5, vec2f(1.0, 1.0));
+
+    if (shape.cornerRadius > 0.001) {
+      return sd_rounded_box(
+        local_p,
+        half_size,
+        vec4f(shape.cornerRadius, shape.cornerRadius, shape.cornerRadius, shape.cornerRadius),
+      );
+    }
+
+    return sd_box(local_p, half_size);
+  }
+
+  return 1e6;
+}
+
+fn render_active_shape(pixel_pos: vec2f) -> vec4f {
+  if (demoUniforms.activeShapeIndex >= demoUniforms.shapeCount) {
+    return vec4f(0.0, 0.0, 0.0, 0.0);
+  }
+
+  let shape = shapeRecords[demoUniforms.activeShapeIndex];
+  let local_p = shape_local_point(shape, pixel_pos);
+  let aa_width = max(length(fwidth(local_p)) * 0.5, 0.75);
+  let sd = evaluate_shape_sdf(shape, local_p);
+  let alpha = fill_from_sdf(sd, aa_width) * clamp(shape.opacity, 0.0, 1.0);
+
+  return vec4f(shape_color(shape), alpha);
 }

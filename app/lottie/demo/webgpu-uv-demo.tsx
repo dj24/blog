@@ -1,29 +1,62 @@
 "use client";
 
 import invariant from "tiny-invariant";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import {
+  createEmptyGpuShapeRecord,
+  encodeGpuShapeRecords,
+  gpuShapeKinds,
+  gpuShapeRecordStrideInBytes,
+} from "../_lib/gpu-shape-record";
 import { buildUvShaderSource } from "./runtime-wgsl-shader";
 import styles from "./page.module.css";
 
-type DemoStatus = "loading" | "ready" | "error";
+const demoUniformSizeInBytes = 32;
 
-const getStatusClassName = (status: DemoStatus) => {
-  if (status === "ready") {
-    return `${styles.status} ${styles.statusReady}`;
-  }
+const roundUpToMultiple = (value: number, multiple: number) => {
+  return Math.ceil(value / multiple) * multiple;
+};
 
-  if (status === "error") {
-    return `${styles.status} ${styles.statusError}`;
-  }
+const writeDemoUniform = (
+  view: DataView,
+  byteOffset: number,
+  activeShapeIndex: number,
+  shapeCount: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  compositionWidth: number,
+  compositionHeight: number,
+) => {
+  view.setUint32(byteOffset, activeShapeIndex, true);
+  view.setUint32(byteOffset + 4, shapeCount, true);
+  view.setUint32(byteOffset + 8, 0, true);
+  view.setUint32(byteOffset + 12, 0, true);
+  view.setFloat32(byteOffset + 16, canvasWidth, true);
+  view.setFloat32(byteOffset + 20, canvasHeight, true);
+  view.setFloat32(byteOffset + 24, compositionWidth, true);
+  view.setFloat32(byteOffset + 28, compositionHeight, true);
+};
 
-  return `${styles.status} ${styles.statusLoading}`;
+const hardcodedRectangleRecord = () => {
+  const record = createEmptyGpuShapeRecord();
+
+  record.id = 0;
+  record.kind = gpuShapeKinds.rectangle;
+  record.positionX = 320;
+  record.positionY = 320;
+  record.width = 180;
+  record.height = 180;
+  record.cornerRadius = 32;
+  record.boundsMinX = -90;
+  record.boundsMinY = -90;
+  record.boundsMaxX = 90;
+  record.boundsMaxY = 90;
+
+  return record;
 };
 
 export const WebGpuUvDemo = ({ compact = false }: { compact?: boolean }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [status, setStatus] = useState<DemoStatus>("loading");
-  const [statusMessage, setStatusMessage] = useState("Combining WGSL shader modules...");
-  const [resolutionLabel, setResolutionLabel] = useState("Awaiting canvas setup");
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -32,16 +65,16 @@ export const WebGpuUvDemo = ({ compact = false }: { compact?: boolean }) => {
       return;
     }
 
-    invariant("gpu" in navigator, "WebGPU is not available in this browser.");
-
-    const context = canvas.getContext("webgpu");
-
-    invariant(context, "The canvas could not acquire a WebGPU context.");
-
-    let animationFrameId = 0;
-    let disposed = false;
+    const shapeRecords = [hardcodedRectangleRecord()];
+    const encodedShapeRecords = encodeGpuShapeRecords(shapeRecords);
 
     const run = async () => {
+      invariant("gpu" in navigator, "WebGPU is not available in this browser.");
+
+      const context = canvas.getContext("webgpu");
+
+      invariant(context, "The canvas could not acquire a WebGPU context.");
+
       const adapter = await navigator.gpu.requestAdapter();
 
       invariant(adapter, "No compatible GPU adapter was found.");
@@ -50,8 +83,53 @@ export const WebGpuUvDemo = ({ compact = false }: { compact?: boolean }) => {
       const presentationFormat = navigator.gpu.getPreferredCanvasFormat();
       const shaderCode = buildUvShaderSource();
       const shaderModule = device.createShaderModule({ code: shaderCode });
+      const drawCount = Math.max(shapeRecords.length, 1);
+      const shapeStorageSize = Math.max(
+        encodedShapeRecords.arrayBuffer.byteLength,
+        gpuShapeRecordStrideInBytes,
+      );
+      const uniformStride = roundUpToMultiple(
+        demoUniformSizeInBytes,
+        device.limits.minUniformBufferOffsetAlignment,
+      );
+
+      const shapeBuffer = device.createBuffer({
+        size: shapeStorageSize,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
+      });
+      const uniformBuffer = device.createBuffer({
+        size: uniformStride * drawCount,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
+      });
+
+      if (encodedShapeRecords.arrayBuffer.byteLength > 0) {
+        device.queue.writeBuffer(shapeBuffer, 0, encodedShapeRecords.arrayBuffer);
+      }
+
+      const bindGroupLayout = device.createBindGroupLayout({
+        entries: [
+          {
+            binding: 0,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: {
+              type: "read-only-storage",
+            },
+          },
+          {
+            binding: 1,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: {
+              type: "uniform",
+              hasDynamicOffset: true,
+            },
+          },
+        ],
+      });
+      const pipelineLayout = device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout],
+      });
       const renderPipeline = device.createRenderPipeline({
-        layout: "auto",
+        layout: pipelineLayout,
         vertex: {
           module: shaderModule,
           entryPoint: "vertexMain",
@@ -59,12 +137,72 @@ export const WebGpuUvDemo = ({ compact = false }: { compact?: boolean }) => {
         fragment: {
           module: shaderModule,
           entryPoint: "fragmentMain",
-          targets: [{ format: presentationFormat }],
+          targets: [
+            {
+              format: presentationFormat,
+              blend: {
+                color: {
+                  operation: "add",
+                  srcFactor: "src-alpha",
+                  dstFactor: "one-minus-src-alpha",
+                },
+                alpha: {
+                  operation: "add",
+                  srcFactor: "one",
+                  dstFactor: "one-minus-src-alpha",
+                },
+              },
+            },
+          ],
         },
         primitive: {
           topology: "triangle-list",
         },
       });
+      const bindGroup = device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: {
+              buffer: shapeBuffer,
+            },
+          },
+          {
+            binding: 1,
+            resource: {
+              buffer: uniformBuffer,
+              size: demoUniformSizeInBytes,
+            },
+          },
+        ],
+      });
+      const uniformArrayBuffer = new ArrayBuffer(uniformStride * drawCount);
+      const uniformView = new DataView(uniformArrayBuffer);
+
+      const drawFrame = () => {
+        const commandEncoder = device.createCommandEncoder();
+        const renderPass = commandEncoder.beginRenderPass({
+          colorAttachments: [
+            {
+              view: context.getCurrentTexture().createView(),
+              clearValue: { r: 0, g: 0, b: 0, a: 1 },
+              loadOp: "clear",
+              storeOp: "store",
+            },
+          ],
+        });
+
+        renderPass.setPipeline(renderPipeline);
+
+        for (let index = 0; index < shapeRecords.length; index += 1) {
+          renderPass.setBindGroup(0, bindGroup, [index * uniformStride]);
+          renderPass.draw(3);
+        }
+        renderPass.end();
+
+        device.queue.submit([commandEncoder.finish()]);
+      };
 
       const configureCanvas = () => {
         const devicePixelRatio = window.devicePixelRatio || 1;
@@ -79,7 +217,22 @@ export const WebGpuUvDemo = ({ compact = false }: { compact?: boolean }) => {
           format: presentationFormat,
           alphaMode: "premultiplied",
         });
-        setResolutionLabel(`${width} x ${height} pixels`);
+
+        for (let index = 0; index < drawCount; index += 1) {
+          writeDemoUniform(
+            uniformView,
+            index * uniformStride,
+            index,
+            shapeRecords.length,
+            width,
+            height,
+            640,
+            640,
+          );
+        }
+
+        device.queue.writeBuffer(uniformBuffer, 0, uniformArrayBuffer);
+        drawFrame();
       };
 
       configureCanvas();
@@ -89,34 +242,6 @@ export const WebGpuUvDemo = ({ compact = false }: { compact?: boolean }) => {
       });
 
       resizeObserver.observe(canvas);
-      const frame = () => {
-        if (disposed) {
-          return;
-        }
-
-        const commandEncoder = device.createCommandEncoder();
-        const renderPass = commandEncoder.beginRenderPass({
-          colorAttachments: [
-            {
-              view: context.getCurrentTexture().createView(),
-              clearValue: { r: 0, g: 0, b: 0, a: 1 },
-              loadOp: "clear",
-              storeOp: "store",
-            },
-          ],
-        });
-
-        renderPass.setPipeline(renderPipeline);
-        renderPass.draw(3);
-        renderPass.end();
-
-        device.queue.submit([commandEncoder.finish()]);
-        animationFrameId = window.requestAnimationFrame(frame);
-      };
-
-      setStatus("ready");
-      setStatusMessage("Rendering a WebGPU SDF gallery from combined WGSL source.");
-      animationFrameId = window.requestAnimationFrame(frame);
 
       return () => {
         resizeObserver.disconnect();
@@ -130,13 +255,10 @@ export const WebGpuUvDemo = ({ compact = false }: { compact?: boolean }) => {
         cleanupResizeObserver = cleanup;
       })
       .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : "Unknown WGSL setup error.";
-        reportError(message);
+        console.error("WebGPU rectangle demo setup failed", error);
       });
 
     return () => {
-      disposed = true;
-      window.cancelAnimationFrame(animationFrameId);
       cleanupResizeObserver?.();
     };
   }, []);

@@ -1,4 +1,5 @@
 import invariant from "tiny-invariant";
+import { gpuShapeRecordWgsl } from "../_lib/gpu-shape-record";
 import fullscreenTriangleSource from "./shaders/fullscreen_triangle.wgsl";
 import mainSource from "./shaders/main.wgsl";
 import sdfUtilsSource from "./shaders/sdf_utils.wgsl";
@@ -34,6 +35,8 @@ export const buildUvShaderSource = () => {
 ${fullscreenTriangle}
 
 ${sdfUtils}
+
+${gpuShapeRecordWgsl}
 
 ${uvGradient}
 
