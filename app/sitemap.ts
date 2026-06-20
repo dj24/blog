@@ -1,10 +1,11 @@
 import type { MetadataRoute } from "next";
+import { env } from "@/env";
 
 const getBaseUrl = () => {
   const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ??
-    process.env.VERCEL_URL ??
+    env.NEXT_PUBLIC_SITE_URL ??
+    env.VERCEL_PROJECT_PRODUCTION_URL ??
+    env.VERCEL_URL ??
     "http://localhost:3000";
 
   return siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
