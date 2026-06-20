@@ -4,6 +4,8 @@ import dynamic from "next/dynamic";
 import styles from "../../page.module.css";
 
 type DotlottiePlayerProps = {
+  currentFrame: number;
+  onCurrentFrameChange: (frame: number) => void;
   src: string;
 };
 
@@ -20,6 +22,16 @@ const DotlottiePlayerClient = dynamic(
   },
 );
 
-export const DotlottiePlayer = ({ src }: DotlottiePlayerProps) => {
-  return <DotlottiePlayerClient src={src} />;
+export const DotlottiePlayer = ({
+  currentFrame,
+  onCurrentFrameChange,
+  src,
+}: DotlottiePlayerProps) => {
+  return (
+    <DotlottiePlayerClient
+      currentFrame={currentFrame}
+      onCurrentFrameChange={onCurrentFrameChange}
+      src={src}
+    />
+  );
 };

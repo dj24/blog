@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import invariant from "tiny-invariant";
-import { DotlottiePlayer } from "./_components/dotlottie-player/dotlottie-player";
+import { PlayerComparison } from "./_components/player-comparison";
 import { decompressDotLottie } from "../_lib/dotlottie";
-import { WebGpuShapeDemo } from "../demo/webgpu-shape-demo";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
@@ -27,6 +26,7 @@ const PlayerPage = async () => {
   const animation = archive.animations[animationId];
 
   invariant(animation, `Animation "${animationId}" was not found in square.lottie.`);
+  const initialFrame = Math.max(0, Math.round(animation.ip));
 
   const facts = [
     {
@@ -54,25 +54,7 @@ const PlayerPage = async () => {
   return (
     <main className={styles.page}>
       <div className={styles.content}>
-        <section className={styles.layout}>
-          <article className={styles.panel}>
-            <div className={styles.panelHeader}>
-              <h2 className={styles.panelTitle}>Scrubber</h2>
-              <span className={`${styles.status} ${styles.statusPaused}`}>Paused By Default</span>
-            </div>
-            <DotlottiePlayer src={publicAssetPath} />
-          </article>
-
-          <article className={styles.panel}>
-            <div className={styles.panelHeader}>
-              <h2 className={styles.panelTitle}>WebGPU Shape Demo</h2>
-              <span className={styles.status}>GPU Snapshot</span>
-            </div>
-            <div className={styles.demoPanelBody}>
-              <WebGpuShapeDemo compact />
-            </div>
-          </article>
-        </section>
+        <PlayerComparison initialFrame={initialFrame} src={publicAssetPath} />
 
         <section className={styles.factsSection}>
           <aside className={styles.panel}>

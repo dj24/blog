@@ -15,6 +15,12 @@ const WebGpuShapeDemoClient = dynamic(
   },
 );
 
-export const WebGpuShapeDemo = ({ compact = false }: { compact?: boolean }) => {
-  return <WebGpuShapeDemoClient compact={compact} />;
+export const WebGpuShapeDemo = ({
+  compact = false,
+  currentFrame = 0,
+}: {
+  compact?: boolean;
+  currentFrame?: number;
+}) => {
+  return <WebGpuShapeDemoClient compact={compact} currentFrame={currentFrame} />;
 };

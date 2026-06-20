@@ -1,10 +1,12 @@
 "use client";
 
 import { DotLottieReact, type DotLottie, type FrameEvent } from "@lottiefiles/dotlottie-react";
-import { type ChangeEvent, useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import styles from "../../page.module.css";
 
 type DotlottiePlayerClientProps = {
+  currentFrame: number;
+  onCurrentFrameChange: (frame: number) => void;
   src: string;
 };
 
@@ -16,11 +18,19 @@ const getMaxFrame = (player: DotLottie | null) => {
   return Math.max(0, Math.ceil(player.totalFrames - 1));
 };
 
-export const DotlottiePlayerClient = ({ src }: DotlottiePlayerClientProps) => {
+export const DotlottiePlayerClient = ({
+  currentFrame,
+  onCurrentFrameChange,
+  src,
+}: DotlottiePlayerClientProps) => {
   const [player, setPlayer] = useState<DotLottie | null>(null);
-  const [currentFrame, setCurrentFrame] = useState(0);
   const [maxFrame, setMaxFrame] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const currentFrameRef = useRef(currentFrame);
+
+  useEffect(() => {
+    currentFrameRef.current = currentFrame;
+  }, [currentFrame]);
 
   useEffect(() => {
     if (!player) {
@@ -29,21 +39,22 @@ export const DotlottiePlayerClient = ({ src }: DotlottiePlayerClientProps) => {
 
     const syncFrameBounds = () => {
       const nextMaxFrame = getMaxFrame(player);
+      const nextFrame = Math.min(Math.round(player.currentFrame), nextMaxFrame);
 
       setMaxFrame(nextMaxFrame);
-      setCurrentFrame(Math.min(Math.round(player.currentFrame), nextMaxFrame));
+      onCurrentFrameChange(nextFrame);
     };
 
     const handleReady = () => {
       player.pause();
       player.setUseFrameInterpolation(false);
-      player.setFrame(0);
+      player.setFrame(currentFrameRef.current);
       syncFrameBounds();
       setIsPlaying(false);
     };
 
     const handleFrame = ({ currentFrame: nextFrame }: FrameEvent) => {
-      setCurrentFrame(Math.min(Math.round(nextFrame), getMaxFrame(player)));
+      onCurrentFrameChange(Math.min(Math.round(nextFrame), getMaxFrame(player)));
     };
 
     const handlePlay = () => {
@@ -57,7 +68,7 @@ export const DotlottiePlayerClient = ({ src }: DotlottiePlayerClientProps) => {
     };
 
     const handleStop = () => {
-      setCurrentFrame(0);
+      onCurrentFrameChange(0);
       setIsPlaying(false);
     };
 
@@ -78,14 +89,25 @@ export const DotlottiePlayerClient = ({ src }: DotlottiePlayerClientProps) => {
       player.removeEventListener("pause", handlePause);
       player.removeEventListener("stop", handleStop);
     };
-  }, [player]);
+  }, [onCurrentFrameChange, player]);
+
+  useEffect(() => {
+    if (!player || player.isPlaying) {
+      return;
+    }
+
+    const nextFrame = Math.min(currentFrame, getMaxFrame(player));
+
+    if (Math.round(player.currentFrame) !== nextFrame) {
+      player.setFrame(nextFrame);
+    }
+  }, [currentFrame, player]);
 
   const handleScrub = (event: ChangeEvent<HTMLInputElement>) => {
     const nextFrame = Number(event.target.value);
 
-    setCurrentFrame(nextFrame);
     player?.pause();
-    player?.setFrame(nextFrame);
+    onCurrentFrameChange(nextFrame);
     setIsPlaying(false);
   };
 

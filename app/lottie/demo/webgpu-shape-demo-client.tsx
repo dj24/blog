@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { encodeGpuShapeRecords, gpuShapeRecordStrideInBytes } from "../_lib/gpu-shape-record";
 import { createLottieGpuFrame } from "../_lib/lottie-gpu-frame";
 import { readLottieJson } from "../_lib/dotlottie";
+import type { LottieComposition } from "../_lib/types/lottie-composition";
 import { buildShapeDemoShaderSource } from "./shape-demo-shader-source";
 import styles from "./page.module.css";
 
@@ -36,16 +37,52 @@ const writeShapeDemoUniform = (
   view.setFloat32(byteOffset + 28, compositionHeight, true);
 };
 
-type EncodedGpuShapeRecords = ReturnType<typeof encodeGpuShapeRecords>;
-
 type WebGpuShapeDemoSetup = {
+  animation: LottieComposition;
+  device: GPUDevice;
+  maxShapeCount: number;
+  presentationFormat: GPUTextureFormat;
+  uniformStride: number;
+};
+
+type WebGpuShapeFrameData = {
   compositionHeight: number;
   compositionWidth: number;
-  device: GPUDevice;
-  encodedShapeRecords: EncodedGpuShapeRecords;
-  presentationFormat: GPUTextureFormat;
+  encodedShapeRecords: ReturnType<typeof encodeGpuShapeRecords>;
   shapeCount: number;
-  uniformStride: number;
+};
+
+type WebGpuRenderState = {
+  context: GPUCanvasContext;
+  drawFrame: (frame: number) => void;
+  resizeObserver: ResizeObserver;
+};
+
+const getShapeFrameData = (animation: LottieComposition, frame: number): WebGpuShapeFrameData => {
+  const lottieFrame = createLottieGpuFrame(animation, frame);
+
+  return {
+    compositionHeight: lottieFrame.compositionHeight,
+    compositionWidth: lottieFrame.compositionWidth,
+    encodedShapeRecords: encodeGpuShapeRecords(lottieFrame.shapeRecords),
+    shapeCount: lottieFrame.shapeRecords.length,
+  };
+};
+
+const getMaxShapeCount = (animation: LottieComposition) => {
+  const startFrame = Math.floor(animation.ip);
+  const endFrame = Math.max(startFrame, Math.ceil(animation.op) - 1);
+
+  let maxShapeCount = 0;
+
+  for (let frame = startFrame; frame <= endFrame; frame += 1) {
+    maxShapeCount = Math.max(
+      maxShapeCount,
+      createLottieGpuFrame(animation, frame).shapeRecords.length,
+    );
+  }
+
+  return maxShapeCount;
 };
 
 const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
@@ -54,9 +91,6 @@ const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
   invariant(response.ok, "The square.lottie demo asset could not be loaded.");
 
   const animation = await readLottieJson("square.lottie", await response.arrayBuffer());
-  const lottieFrame = createLottieGpuFrame(animation, animation.ip);
-  const { compositionHeight, compositionWidth, shapeRecords } = lottieFrame;
-  const encodedShapeRecords = encodeGpuShapeRecords(shapeRecords);
 
   invariant("gpu" in navigator, "WebGPU is not available in this browser.");
 
@@ -71,23 +105,34 @@ const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
   );
 
   return {
-    compositionHeight,
-    compositionWidth,
+    animation,
     device,
-    encodedShapeRecords,
+    maxShapeCount: getMaxShapeCount(animation),
     presentationFormat: navigator.gpu.getPreferredCanvasFormat(),
-    shapeCount: shapeRecords.length,
     uniformStride,
   };
 };
 
-export const WebGpuShapeDemoClient = ({ compact = false }: { compact?: boolean }) => {
+export const WebGpuShapeDemoClient = ({
+  compact = false,
+  currentFrame = 0,
+}: {
+  compact?: boolean;
+  currentFrame?: number;
+}) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const currentFrameRef = useRef(currentFrame);
+  const renderStateRef = useRef<WebGpuRenderState | null>(null);
   const webGpuShapeDemoQuery = useQuery({
     queryKey: ["webgpu-shape-demo", squareDotLottieAssetUrl],
     queryFn: getWebGpuShapeDemoSetup,
     staleTime: Number.POSITIVE_INFINITY,
   });
+
+  useEffect(() => {
+    currentFrameRef.current = currentFrame;
+    renderStateRef.current?.drawFrame(currentFrame);
+  }, [currentFrame]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -101,36 +146,11 @@ export const WebGpuShapeDemoClient = ({ compact = false }: { compact?: boolean }
 
     invariant(context, "The canvas could not acquire a WebGPU context.");
 
-    const {
-      compositionHeight,
-      compositionWidth,
-      device,
-      encodedShapeRecords,
-      presentationFormat,
-      shapeCount,
-      uniformStride,
-    } = setup;
+    const { animation, device, maxShapeCount, presentationFormat, uniformStride } = setup;
+    const drawCapacity = Math.max(maxShapeCount, 1);
+    const shapeStorageSize = gpuShapeRecordStrideInBytes * drawCapacity;
     const shaderCode = buildShapeDemoShaderSource();
     const shaderModule = device.createShaderModule({ code: shaderCode });
-    const drawCount = Math.max(shapeCount, 1);
-    const shapeStorageSize = Math.max(
-      encodedShapeRecords.arrayBuffer.byteLength,
-      gpuShapeRecordStrideInBytes,
-    );
-
-    const shapeBuffer = device.createBuffer({
-      size: shapeStorageSize,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
-    });
-    const uniformBuffer = device.createBuffer({
-      size: uniformStride * drawCount,
-      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
-    });
-
-    if (encodedShapeRecords.arrayBuffer.byteLength > 0) {
-      device.queue.writeBuffer(shapeBuffer, 0, encodedShapeRecords.arrayBuffer);
-    }
-
     const bindGroupLayout = device.createBindGroupLayout({
       entries: [
         {
@@ -184,6 +204,14 @@ export const WebGpuShapeDemoClient = ({ compact = false }: { compact?: boolean }
         topology: "triangle-list",
       },
     });
+    const shapeBuffer = device.createBuffer({
+      size: shapeStorageSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
+    });
+    const uniformBuffer = device.createBuffer({
+      size: uniformStride * drawCapacity,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
+    });
     const bindGroup = device.createBindGroup({
       layout: bindGroupLayout,
       entries: [
@@ -202,10 +230,45 @@ export const WebGpuShapeDemoClient = ({ compact = false }: { compact?: boolean }
         },
       ],
     });
-    const uniformArrayBuffer = new ArrayBuffer(uniformStride * drawCount);
-    const uniformView = new DataView(uniformArrayBuffer);
 
-    const drawFrame = () => {
+    const drawFrame = (frame: number) => {
+      const { compositionHeight, compositionWidth, encodedShapeRecords, shapeCount } =
+        getShapeFrameData(animation, frame);
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      const width = Math.max(1, Math.floor(canvas.clientWidth * devicePixelRatio));
+      const height = Math.max(1, Math.floor(canvas.clientHeight * devicePixelRatio));
+
+      canvas.width = width;
+      canvas.height = height;
+
+      context.configure({
+        device,
+        format: presentationFormat,
+        alphaMode: "premultiplied",
+      });
+
+      if (encodedShapeRecords.arrayBuffer.byteLength > 0) {
+        device.queue.writeBuffer(shapeBuffer, 0, encodedShapeRecords.arrayBuffer);
+      }
+
+      const uniformArrayBuffer = new ArrayBuffer(uniformStride * Math.max(shapeCount, 1));
+      const uniformView = new DataView(uniformArrayBuffer);
+
+      for (let index = 0; index < shapeCount; index += 1) {
+        writeShapeDemoUniform(
+          uniformView,
+          index * uniformStride,
+          index,
+          shapeCount,
+          width,
+          height,
+          compositionWidth,
+          compositionHeight,
+        );
+      }
+
+      device.queue.writeBuffer(uniformBuffer, 0, uniformArrayBuffer);
+
       const commandEncoder = device.createCommandEncoder();
       const renderPass = commandEncoder.beginRenderPass({
         colorAttachments: [
@@ -229,47 +292,24 @@ export const WebGpuShapeDemoClient = ({ compact = false }: { compact?: boolean }
       device.queue.submit([commandEncoder.finish()]);
     };
 
-    const configureCanvas = () => {
-      const devicePixelRatio = window.devicePixelRatio || 1;
-      const width = Math.max(1, Math.floor(canvas.clientWidth * devicePixelRatio));
-      const height = Math.max(1, Math.floor(canvas.clientHeight * devicePixelRatio));
-
-      canvas.width = width;
-      canvas.height = height;
-
-      context.configure({
-        device,
-        format: presentationFormat,
-        alphaMode: "premultiplied",
-      });
-
-      for (let index = 0; index < drawCount; index += 1) {
-        writeShapeDemoUniform(
-          uniformView,
-          index * uniformStride,
-          index,
-          shapeCount,
-          width,
-          height,
-          compositionWidth,
-          compositionHeight,
-        );
-      }
-
-      device.queue.writeBuffer(uniformBuffer, 0, uniformArrayBuffer);
-      drawFrame();
-    };
-
-    configureCanvas();
-
     const resizeObserver = new ResizeObserver(() => {
-      configureCanvas();
+      drawFrame(currentFrameRef.current);
     });
 
     resizeObserver.observe(canvas);
+    renderStateRef.current = {
+      context,
+      drawFrame,
+      resizeObserver,
+    };
+    drawFrame(currentFrameRef.current);
 
     return () => {
       resizeObserver.disconnect();
+
+      if (renderStateRef.current?.context === context) {
+        renderStateRef.current = null;
+      }
     };
   }, [webGpuShapeDemoQuery.data]);
 
