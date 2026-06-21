@@ -66,10 +66,10 @@ const writeShapeDemoUniform = (
 
 type WebGpuShapeDemoSetup = {
   animation: LottieComposition;
+  canvasFormat: GPUTextureFormat;
   device: GPUDevice;
   maxCubicBezierSegmentCount: number;
   maxShapeCount: number;
-  presentationFormat: GPUTextureFormat;
   timestampQuerySupported: boolean;
   uniformStride: number;
 };
@@ -97,6 +97,13 @@ type WebGpuTileBucketResources = {
   zeroTileShapeCounts: ArrayBuffer;
 };
 
+type WebGpuRasterTargetResources = {
+  texture: GPUTexture;
+  textureView: GPUTextureView;
+  width: number;
+  height: number;
+};
+
 type WebGpuTimestampQueryResources = {
   querySet: GPUQuerySet;
   resolveBuffer: GPUBuffer;
@@ -115,6 +122,12 @@ const getTileDimensions = (canvasWidth: number, canvasHeight: number) => {
 const destroyTileBucketResources = (resources: WebGpuTileBucketResources | null) => {
   resources?.tileShapeCountBuffer.destroy();
   resources?.tileShapeIndexBuffer.destroy();
+};
+
+const destroyRasterTargetResources = (
+  resources: WebGpuRasterTargetResources | null,
+) => {
+  resources?.texture.destroy();
 };
 
 const createTimestampQueryResources = (
@@ -314,22 +327,33 @@ const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
 
   invariant(adapter, "No compatible GPU adapter was found.");
 
+  const preferredCanvasFormat = navigator.gpu.getPreferredCanvasFormat();
+  const bgra8unormStorageSupported = adapter.features.has("bgra8unorm-storage");
   const timestampQuerySupported = adapter.features.has("timestamp-query");
   const device = await adapter.requestDevice({
-    requiredFeatures: timestampQuerySupported ? ["timestamp-query"] : [],
+    requiredFeatures: [
+      ...(timestampQuerySupported ? (["timestamp-query"] as const) : []),
+      ...(preferredCanvasFormat === "bgra8unorm" && bgra8unormStorageSupported
+        ? (["bgra8unorm-storage"] as const)
+        : []),
+    ],
   });
   const uniformStride = roundUpToMultiple(
     shapeDemoUniformSizeInBytes,
     device.limits.minUniformBufferOffsetAlignment,
   );
   const framePayloadCounts = getMaxFramePayloadCounts(animation);
+  const canvasFormat =
+    preferredCanvasFormat === "bgra8unorm" && !bgra8unormStorageSupported
+      ? "rgba8unorm"
+      : preferredCanvasFormat;
 
   return {
     animation,
+    canvasFormat,
     device,
     maxCubicBezierSegmentCount: framePayloadCounts.maxCubicBezierSegmentCount,
     maxShapeCount: framePayloadCounts.maxShapeCount,
-    presentationFormat: navigator.gpu.getPreferredCanvasFormat(),
     timestampQuerySupported,
     uniformStride,
   };
@@ -373,10 +397,10 @@ export const WebGpuShapeDemoClient = ({
 
     const {
       animation,
+      canvasFormat,
       device,
       maxCubicBezierSegmentCount,
       maxShapeCount,
-      presentationFormat,
       timestampQuerySupported,
       uniformStride,
     } = setup;
@@ -385,20 +409,23 @@ export const WebGpuShapeDemoClient = ({
     const shapeStorageSize = gpuShapeRecordStrideInBytes * drawCapacity;
     const cubicBezierSegmentStorageSize =
       gpuCubicBezierSegmentStrideInBytes * cubicBezierSegmentCapacity;
-    const shaderCode = buildShapeDemoShaderSource();
+    const shaderCode = buildShapeDemoShaderSource({
+      rasterTargetFormat:
+        canvasFormat === "bgra8unorm" ? "bgra8unorm" : "rgba8unorm",
+    });
     const shaderModule = device.createShaderModule({ code: shaderCode });
     const bindGroupLayout = device.createBindGroupLayout({
       entries: [
         {
           binding: 0,
-          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.COMPUTE,
           buffer: {
             type: "read-only-storage",
           },
         },
         {
           binding: 1,
-          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.COMPUTE,
           buffer: {
             type: "uniform",
             hasDynamicOffset: true,
@@ -406,23 +433,31 @@ export const WebGpuShapeDemoClient = ({
         },
         {
           binding: 2,
-          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.COMPUTE,
           buffer: {
             type: "read-only-storage",
           },
         },
         {
           binding: 3,
-          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.COMPUTE,
           buffer: {
             type: "storage",
           },
         },
         {
           binding: 4,
-          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.COMPUTE,
           buffer: {
             type: "storage",
+          },
+        },
+        {
+          binding: 5,
+          visibility: GPUShaderStage.COMPUTE,
+          storageTexture: {
+            access: "write-only",
+            format: canvasFormat,
           },
         },
       ],
@@ -437,23 +472,11 @@ export const WebGpuShapeDemoClient = ({
         entryPoint: "tileBucketPrepassComputeMain",
       },
     });
-    const finalRasterPipeline = device.createRenderPipeline({
+    const finalRasterPipeline = device.createComputePipeline({
       layout: pipelineLayout,
-      vertex: {
+      compute: {
         module: shaderModule,
-        entryPoint: "vertexMain",
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: "finalRasterFragmentMain",
-        targets: [
-          {
-            format: presentationFormat,
-          },
-        ],
-      },
-      primitive: {
-        topology: "triangle-list",
+        entryPoint: "finalRasterComputeMain",
       },
     });
     const shapeBuffer = device.createBuffer({
@@ -472,6 +495,7 @@ export const WebGpuShapeDemoClient = ({
       ? createTimestampQueryResources(device)
       : null;
     let tileBucketResources: WebGpuTileBucketResources | null = null;
+    let rasterTargetResources: WebGpuRasterTargetResources | null = null;
     let isDisposed = false;
     let latestTimestampRequestId = 0;
 
@@ -499,8 +523,9 @@ export const WebGpuShapeDemoClient = ({
 
       context.configure({
         device,
-        format: presentationFormat,
+        format: canvasFormat,
         alphaMode: "premultiplied",
+        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
       });
 
       if (
@@ -525,6 +550,30 @@ export const WebGpuShapeDemoClient = ({
           }),
           tileWidth,
           zeroTileShapeCounts: new ArrayBuffer(tileCount * Uint32Array.BYTES_PER_ELEMENT),
+        };
+      }
+
+      if (
+        !rasterTargetResources ||
+        rasterTargetResources.width !== width ||
+        rasterTargetResources.height !== height
+      ) {
+        destroyRasterTargetResources(rasterTargetResources);
+
+        const texture = device.createTexture({
+          size: {
+            width,
+            height,
+          },
+          format: canvasFormat,
+          usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING,
+        });
+
+        rasterTargetResources = {
+          height,
+          texture,
+          textureView: texture.createView(),
+          width,
         };
       }
 
@@ -616,6 +665,10 @@ export const WebGpuShapeDemoClient = ({
               buffer: tileBucketResources.tileShapeIndexBuffer,
             },
           },
+          {
+            binding: 5,
+            resource: rasterTargetResources.textureView,
+          },
         ],
       });
 
@@ -640,28 +693,36 @@ export const WebGpuShapeDemoClient = ({
       }
       tileBucketPass.end();
 
-      const shapePass = commandEncoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: context.getCurrentTexture().createView(),
-            clearValue: { r: 0, g: 0, b: 0, a: 0 },
-            loadOp: "clear",
-            storeOp: "store",
-          },
-        ],
-        timestampWrites: timestampQueryResources
+      const shapePass = commandEncoder.beginComputePass(
+        timestampQueryResources
           ? {
-              beginningOfPassWriteIndex: 2,
-              endOfPassWriteIndex: 3,
-              querySet: timestampQueryResources.querySet,
+              timestampWrites: {
+                beginningOfPassWriteIndex: 2,
+                endOfPassWriteIndex: 3,
+                querySet: timestampQueryResources.querySet,
+              },
             }
           : undefined,
-      });
+      );
 
       shapePass.setPipeline(finalRasterPipeline);
       shapePass.setBindGroup(0, bindGroup, [finalPassUniformOffset]);
-      shapePass.draw(3);
+      shapePass.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
       shapePass.end();
+
+      commandEncoder.copyTextureToTexture(
+        {
+          texture: rasterTargetResources.texture,
+        },
+        {
+          texture: context.getCurrentTexture(),
+        },
+        {
+          width,
+          height,
+          depthOrArrayLayers: 1,
+        },
+      );
 
       const timestampReadbackBuffer = timestampQueryResources
         ? device.createBuffer({
@@ -748,6 +809,7 @@ export const WebGpuShapeDemoClient = ({
       isDisposed = true;
       resizeObserver.disconnect();
       destroyTileBucketResources(tileBucketResources);
+      destroyRasterTargetResources(rasterTargetResources);
       destroyTimestampQueryResources(timestampQueryResources);
       shapeBuffer.destroy();
       cubicBezierSegmentBuffer.destroy();
