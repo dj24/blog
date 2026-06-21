@@ -26,6 +26,7 @@ import type {
   LottiePathShape,
   LottieRectangleShape,
   LottieShapeGroup,
+  LottieStrokeShape,
   LottieTransformShape,
 } from "./types/lottie-shape";
 
@@ -36,10 +37,23 @@ type Paint = {
   opacity: number;
 };
 
+type Stroke = Paint & {
+  width: number;
+  lineCap: number;
+  lineJoin: number;
+  miterLimit: number;
+  blendMode: number;
+};
+
+type ShapeStyle = {
+  fill: Paint | null;
+  stroke: Stroke | null;
+};
+
 type WalkContext = {
   matrix: Matrix2d;
   opacity: number;
-  paint: Paint | null;
+  style: ShapeStyle;
 };
 
 type ShapeItemWithType = {
@@ -61,8 +75,12 @@ type FlattenedGpuShapeBuffers = {
 const identityMatrix: Matrix2d = [1, 0, 0, 1, 0, 0];
 const defaultPaint: Paint = {
   color: [0, 0, 0],
-  opacity: 1,
+  opacity: 0,
 };
+const defaultLineCap = 1;
+const defaultLineJoin = 1;
+const defaultMiterLimit = 4;
+const defaultBlendMode = 0;
 const defaultBezierPathGeometry: LottieBezierPathGeometry = {
   c: false,
   v: [],
@@ -71,7 +89,6 @@ const defaultBezierPathGeometry: LottieBezierPathGeometry = {
 };
 const cubicBezierEpsilon = 0.000001;
 const cubicBezierIterations = 8;
-const pathStrokeWidth = 10;
 
 const multiplyMatrices = (left: Matrix2d, right: Matrix2d): Matrix2d => {
   return [
@@ -502,7 +519,7 @@ const mergeFlattenedGpuShapeBuffers = (
   }, emptyFlattenedGpuShapeBuffers());
 };
 
-const paintFromItem = (item: LottieFillShape | LottieGradientFillShape, frame: number): Paint => {
+const fillFromItem = (item: LottieFillShape | LottieGradientFillShape, frame: number): Paint => {
   return match(item)
     .with({ ty: "fl" }, (fill) => {
       return {
@@ -517,6 +534,18 @@ const paintFromItem = (item: LottieFillShape | LottieGradientFillShape, frame: n
       };
     })
     .exhaustive();
+};
+
+const strokeFromItem = (item: LottieStrokeShape, frame: number): Stroke => {
+  return {
+    color: evaluateProperty(item.c, frame) ?? defaultPaint.color,
+    opacity: numberFrom(item.o, frame, 100) / 100,
+    width: numberFrom(item.w, frame, 0),
+    lineCap: item.lc ?? defaultLineCap,
+    lineJoin: item.lj ?? defaultLineJoin,
+    miterLimit: item.ml ?? defaultMiterLimit,
+    blendMode: item.bm ?? defaultBlendMode,
+  };
 };
 
 const bezierPathGeometryFrom = (
@@ -593,28 +622,47 @@ const groupTransform = (group: LottieShapeGroup) => {
   });
 };
 
-const groupPaint = (group: LottieShapeGroup, frame: number, inheritedPaint: Paint | null) => {
-  const paintItem = group.it.find(
-    (item): item is LottieFillShape | LottieGradientFillShape =>
-      hasShapeType(item) && (item.ty === "fl" || item.ty === "gf"),
-  );
+const groupStyle = (group: LottieShapeGroup, frame: number, inheritedStyle: ShapeStyle) => {
+  return group.it.reduce<ShapeStyle>((style, item) => {
+    if (!hasShapeType(item)) {
+      return style;
+    }
 
-  return paintItem ? paintFromItem(paintItem, frame) : inheritedPaint;
+    if (item.ty === "fl" || item.ty === "gf") {
+      const fillItem = item as LottieFillShape | LottieGradientFillShape;
+
+      return {
+        ...style,
+        fill: fillFromItem(fillItem, frame),
+      };
+    }
+
+    if (item.ty === "st") {
+      const strokeItem = item as LottieStrokeShape;
+
+      return {
+        ...style,
+        stroke: strokeFromItem(strokeItem, frame),
+      };
+    }
+
+    return style;
+  }, inheritedStyle);
 };
 
 const createBaseRecord = ({
   context,
   id,
-  paint,
   position,
 }: {
   context: WalkContext;
   id: number;
-  paint: Paint;
   position: LottieVector2;
 }) => {
   const record = createEmptyGpuShapeRecord();
   const transformedPosition = applyMatrix(context.matrix, position);
+  const fill = context.style.fill ?? defaultPaint;
+  const stroke = context.style.stroke;
 
   record.id = id;
   record.positionX = transformedPosition[0];
@@ -623,10 +671,19 @@ const createBaseRecord = ({
   record.scaleY = matrixScaleY(context.matrix);
   record.rotation = matrixRotation(context.matrix);
   record.opacity = context.opacity;
-  record.fillRed = paint.color[0];
-  record.fillGreen = paint.color[1];
-  record.fillBlue = paint.color[2];
-  record.fillAlpha = paint.opacity;
+  record.fillRed = fill.color[0];
+  record.fillGreen = fill.color[1];
+  record.fillBlue = fill.color[2];
+  record.fillAlpha = fill.opacity;
+  record.strokeRed = stroke?.color[0] ?? 0;
+  record.strokeGreen = stroke?.color[1] ?? 0;
+  record.strokeBlue = stroke?.color[2] ?? 0;
+  record.strokeAlpha = stroke?.opacity ?? 0;
+  record.strokeWidth = stroke?.width ?? 0;
+  record.strokeMiterLimit = stroke?.miterLimit ?? defaultMiterLimit;
+  record.strokeLineCap = stroke?.lineCap ?? defaultLineCap;
+  record.strokeLineJoin = stroke?.lineJoin ?? defaultLineJoin;
+  record.strokeBlendMode = stroke?.blendMode ?? defaultBlendMode;
 
   return record;
 };
@@ -639,8 +696,7 @@ const rectangleRecordFromShape = (
 ) => {
   const size = vector2PropertyFrom(shape.s, frame, [0, 0]);
   const position = vector2PropertyFrom(shape.p, frame, [0, 0]);
-  const paint = context.paint ?? defaultPaint;
-  const record = createBaseRecord({ context, id, paint, position });
+  const record = createBaseRecord({ context, id, position });
 
   record.kind = gpuShapeKinds.rectangle;
   record.width = size[0];
@@ -662,8 +718,7 @@ const ellipseRecordFromShape = (
 ) => {
   const size = vector2PropertyFrom(shape.s, frame, [0, 0]);
   const position = vector2PropertyFrom(shape.p, frame, [0, 0]);
-  const paint = context.paint ?? defaultPaint;
-  const record = createBaseRecord({ context, id, paint, position });
+  const record = createBaseRecord({ context, id, position });
 
   record.kind = gpuShapeKinds.ellipse;
   record.width = size[0];
@@ -692,7 +747,12 @@ const pathRecordFromShape = (
     return emptyFlattenedGpuShapeBuffers();
   }
 
-  const paint = context.paint ?? defaultPaint;
+  const pathStroke = context.style.stroke;
+
+  if (!pathStroke) {
+    return emptyFlattenedGpuShapeBuffers();
+  }
+
   const segmentOffset = allocateSegmentOffset(segments.length);
   const segmentInstances = segments.map((segment, index) => {
     const uploadedPoints: readonly LottieVector2[] = [
@@ -718,15 +778,20 @@ const pathRecordFromShape = (
   return {
     shapeRecords: segmentInstances.map((segmentInstance) => {
       const record = createBaseRecord({
-        context,
+        context: {
+          ...context,
+          style: {
+            fill: null,
+            stroke: pathStroke,
+          },
+        },
         id: nextId(),
-        paint,
         position: [segmentInstance.center[0], -segmentInstance.center[1]],
       });
 
       record.kind = gpuShapeKinds.path;
       record.pathIndex = segmentInstance.segmentIndex;
-      record.width = pathStrokeWidth;
+      record.width = pathStroke.width;
       record.boundsMinX = segmentInstance.bounds.minX - segmentInstance.center[0];
       record.boundsMinY = segmentInstance.bounds.minY - segmentInstance.center[1];
       record.boundsMaxX = segmentInstance.bounds.maxX - segmentInstance.center[0];
@@ -771,7 +836,7 @@ const shapeRecordsFromItem = (
   if (item.ty === "gr") {
     const group = item as LottieShapeGroup;
     const groupContext = createContextWithTransform(
-      { ...context, paint: groupPaint(group, frame, context.paint) },
+      { ...context, style: groupStyle(group, frame, context.style) },
       groupTransform(group),
       frame,
     );
@@ -779,7 +844,7 @@ const shapeRecordsFromItem = (
     return mergeFlattenedGpuShapeBuffers(
       group.it.map((child) => {
         if (hasShapeType(child)) {
-          if (child.ty === "tr" || child.ty === "fl" || child.ty === "gf") {
+          if (child.ty === "tr" || child.ty === "fl" || child.ty === "gf" || child.ty === "st") {
             return emptyFlattenedGpuShapeBuffers();
           }
         }
@@ -835,7 +900,10 @@ const contextFromLayer = (layer: LottieShapeLayer, frame: number): WalkContext =
   return {
     matrix: multiplyMatrices(identityMatrix, transformMatrix(resolved)),
     opacity: resolved.opacity,
-    paint: null,
+    style: {
+      fill: null,
+      stroke: null,
+    },
   };
 };
 

@@ -136,13 +136,135 @@ const createStaticPathAnimation = (closed: boolean): LottieComposition => {
                 },
               },
               {
-                ty: "fl",
+                ty: "st",
                 c: { a: 0, k: [0.2, 0.4, 0.8] },
                 o: { a: 0, k: 100 },
+                w: { a: 0, k: 10 },
               },
               {
                 ty: "tr",
                 p: { a: 0, k: [80, 80] },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const createRectangleWithSolidStrokeAnimation = (): LottieComposition => {
+  return {
+    v: "5.7.5",
+    fr: 60,
+    ip: 0,
+    op: 10,
+    w: 200,
+    h: 200,
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        ip: 0,
+        op: 10,
+        ks: {
+          o: { a: 0, k: 100 },
+        },
+        shapes: [
+          {
+            ty: "gr",
+            it: [
+              {
+                ty: "rc",
+                s: { a: 0, k: [60, 40] },
+                p: { a: 0, k: [0, 0] },
+                r: { a: 0, k: 6 },
+              },
+              {
+                ty: "fl",
+                c: { a: 0, k: [0.1, 0.2, 0.3] },
+                o: { a: 0, k: 80 },
+              },
+              {
+                ty: "st",
+                c: { a: 0, k: [0.9, 0.8, 0.7] },
+                o: { a: 0, k: 60 },
+                w: { a: 0, k: 12 },
+                lc: 2,
+                lj: 3,
+                ml: 7,
+                bm: 5,
+              },
+              {
+                ty: "tr",
+                p: { a: 0, k: [100, 90] },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const createStrokedPathAnimation = (): LottieComposition => {
+  return {
+    v: "5.7.5",
+    fr: 60,
+    ip: 0,
+    op: 10,
+    w: 200,
+    h: 200,
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        ip: 0,
+        op: 10,
+        ks: {
+          o: { a: 0, k: 100 },
+        },
+        shapes: [
+          {
+            ty: "gr",
+            it: [
+              {
+                ty: "sh",
+                ks: {
+                  a: 0,
+                  k: {
+                    c: false,
+                    v: [
+                      [0, 0],
+                      [40, 0],
+                    ],
+                    i: [
+                      [0, 0],
+                      [0, 0],
+                    ],
+                    o: [
+                      [0, 0],
+                      [0, 0],
+                    ],
+                  },
+                },
+              },
+              {
+                ty: "st",
+                c: { a: 0, k: [0.25, 0.5, 0.75] },
+                o: { a: 0, k: 90 },
+                w: { a: 0, k: 14 },
+                lc: 3,
+                lj: 2,
+                ml: 9,
+              },
+              {
+                ty: "tr",
+                p: { a: 0, k: [80, 100] },
                 o: { a: 0, k: 100 },
               },
             ],
@@ -240,9 +362,10 @@ const animatedWrappedPathJson = JSON.stringify({
               },
             },
             {
-              ty: "fl",
+              ty: "st",
               c: { a: 0, k: [0.2, 0.8, 0.4] },
               o: { a: 0, k: 100 },
+              w: { a: 0, k: 10 },
             },
             {
               ty: "tr",
@@ -263,11 +386,11 @@ describe("Lottie GPU frame conversion", () => {
 
     assert.equal(frame.compositionWidth, 640);
     assert.equal(frame.compositionHeight, 640);
-    assert.equal(frame.shapeRecords.length, 3);
-    assert.equal(frame.cubicBezierSegments.length, 0);
+    assert.equal(frame.shapeRecords.length, 4);
+    assert.equal(frame.cubicBezierSegments.length, 1);
     assert.ok(frame.shapeRecords.some((record) => record.kind === gpuShapeKinds.ellipse));
     assert.ok(frame.shapeRecords.some((record) => record.kind === gpuShapeKinds.rectangle));
-    assert.ok(frame.shapeRecords.every((record) => record.kind !== gpuShapeKinds.path));
+    assert.ok(frame.shapeRecords.some((record) => record.kind === gpuShapeKinds.path));
   });
 
   test("extracts the first-frame blue rounded square from square.lottie", async () => {
@@ -334,10 +457,10 @@ describe("Lottie GPU frame conversion", () => {
     assertApproximatelyEqual(switchedSquare.positionY, 50);
   });
 
-  test("resolves frames before the first keyframe and after the last keyframe", async () => {
+  test("resolves frames before the first keyframe and after the last keyframe while visible", async () => {
     const animation = await loadSquareAnimation();
-    const beforeFirstKeyframe = findBlueSquare(animation, -10);
-    const afterLastKeyframe = findBlueSquare(animation, 1000);
+    const beforeFirstKeyframe = findBlueSquare(animation, animation.ip);
+    const afterLastKeyframe = findBlueSquare(animation, animation.op);
 
     assert.ok(beforeFirstKeyframe);
     assert.ok(afterLastKeyframe);
@@ -383,6 +506,45 @@ describe("Lottie GPU frame conversion", () => {
     assert.equal(frame.shapeRecords.filter((record) => record.kind === gpuShapeKinds.path).length, 2);
   });
 
+  test("packs solid fill and solid stroke into the same rectangle record", () => {
+    const frame = createLottieGpuFrame(createRectangleWithSolidStrokeAnimation(), 0);
+    const rectangle = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.rectangle);
+
+    assert.ok(rectangle);
+    assertApproximatelyEqual(rectangle.positionX, 100);
+    assertApproximatelyEqual(rectangle.positionY, 90);
+    assertApproximatelyEqual(rectangle.fillRed, 0.1);
+    assertApproximatelyEqual(rectangle.fillGreen, 0.2);
+    assertApproximatelyEqual(rectangle.fillBlue, 0.3);
+    assertApproximatelyEqual(rectangle.fillAlpha, 0.8);
+    assertApproximatelyEqual(rectangle.strokeRed, 0.9);
+    assertApproximatelyEqual(rectangle.strokeGreen, 0.8);
+    assertApproximatelyEqual(rectangle.strokeBlue, 0.7);
+    assertApproximatelyEqual(rectangle.strokeAlpha, 0.6);
+    assertApproximatelyEqual(rectangle.strokeWidth, 12);
+    assertApproximatelyEqual(rectangle.strokeMiterLimit, 7);
+    assert.equal(rectangle.strokeLineCap, 2);
+    assert.equal(rectangle.strokeLineJoin, 3);
+    assert.equal(rectangle.strokeBlendMode, 5);
+  });
+
+  test("uses authored solid stroke data for path records", () => {
+    const frame = createLottieGpuFrame(createStrokedPathAnimation(), 0);
+    const pathRecord = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.path);
+
+    assert.ok(pathRecord);
+    assertApproximatelyEqual(pathRecord.width, 14);
+    assertApproximatelyEqual(pathRecord.fillAlpha, 0);
+    assertApproximatelyEqual(pathRecord.strokeRed, 0.25);
+    assertApproximatelyEqual(pathRecord.strokeGreen, 0.5);
+    assertApproximatelyEqual(pathRecord.strokeBlue, 0.75);
+    assertApproximatelyEqual(pathRecord.strokeAlpha, 0.9);
+    assertApproximatelyEqual(pathRecord.strokeWidth, 14);
+    assertApproximatelyEqual(pathRecord.strokeMiterLimit, 9);
+    assert.equal(pathRecord.strokeLineCap, 3);
+    assert.equal(pathRecord.strokeLineJoin, 2);
+  });
+
   test("encodes path segment shapes and cubic segments with the expected layout", () => {
     const frame = createLottieGpuFrame(createStaticPathAnimation(true), 0);
     const encodedShapeRecords = encodeGpuShapeRecords(frame.shapeRecords);
@@ -404,6 +566,22 @@ describe("Lottie GPU frame conversion", () => {
     assertApproximatelyEqual(segmentView.getFloat32(20, true), 0);
     assertApproximatelyEqual(segmentView.getFloat32(24, true), 20);
     assertApproximatelyEqual(segmentView.getFloat32(28, true), 0);
+  });
+
+  test("encodes solid stroke payload into the GPU shape struct lanes", () => {
+    const frame = createLottieGpuFrame(createRectangleWithSolidStrokeAnimation(), 0);
+    const encodedShapeRecords = encodeGpuShapeRecords(frame.shapeRecords);
+    const shapeView = new DataView(encodedShapeRecords.arrayBuffer);
+
+    assert.equal(shapeView.getUint32(12, true), 2);
+    assert.equal(shapeView.getUint32(20, true), 3);
+    assert.equal(shapeView.getUint32(24, true), 5);
+    assertApproximatelyEqual(shapeView.getFloat32(40, true), 0.9);
+    assertApproximatelyEqual(shapeView.getFloat32(44, true), 0.8);
+    assertApproximatelyEqual(shapeView.getFloat32(108, true), 0.7);
+    assertApproximatelyEqual(shapeView.getFloat32(112, true), 0.6);
+    assertApproximatelyEqual(shapeView.getFloat32(116, true), 12);
+    assertApproximatelyEqual(shapeView.getFloat32(120, true), 7);
   });
 
   test("preserves authored cubic endpoints and handles after centering and y-flip", () => {

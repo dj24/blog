@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import invariant from "tiny-invariant";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   encodeGpuCubicBezierSegments,
   encodeGpuShapeRecords,
@@ -18,6 +18,8 @@ import styles from "./page.module.css";
 const shapeDemoUniformSizeInBytes = 48;
 const squareDotLottieAssetUrl = "/lottie/assets/square.lottie";
 const tileSize = 32;
+const timestampQueryCount = 4;
+const timestampQueryBufferSize = timestampQueryCount * BigUint64Array.BYTES_PER_ELEMENT;
 
 const roundUpToMultiple = (value: number, multiple: number) => {
   return Math.ceil(value / multiple) * multiple;
@@ -68,6 +70,7 @@ type WebGpuShapeDemoSetup = {
   maxCubicBezierSegmentCount: number;
   maxShapeCount: number;
   presentationFormat: GPUTextureFormat;
+  timestampQuerySupported: boolean;
   uniformStride: number;
 };
 
@@ -94,6 +97,11 @@ type WebGpuTileBucketResources = {
   zeroTileShapeCounts: ArrayBuffer;
 };
 
+type WebGpuTimestampQueryResources = {
+  querySet: GPUQuerySet;
+  resolveBuffer: GPUBuffer;
+};
+
 const getTileDimensions = (canvasWidth: number, canvasHeight: number) => {
   const tileWidth = Math.max(1, Math.ceil(canvasWidth / tileSize));
   const tileHeight = Math.max(1, Math.ceil(canvasHeight / tileSize));
@@ -107,6 +115,71 @@ const getTileDimensions = (canvasWidth: number, canvasHeight: number) => {
 const destroyTileBucketResources = (resources: WebGpuTileBucketResources | null) => {
   resources?.tileShapeCountBuffer.destroy();
   resources?.tileShapeIndexBuffer.destroy();
+};
+
+const createTimestampQueryResources = (
+  device: GPUDevice,
+): WebGpuTimestampQueryResources => {
+  return {
+    querySet: device.createQuerySet({
+      count: timestampQueryCount,
+      type: "timestamp",
+    }),
+    resolveBuffer: device.createBuffer({
+      size: timestampQueryBufferSize,
+      usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.QUERY_RESOLVE,
+    }),
+  };
+};
+
+const destroyTimestampQueryResources = (
+  resources: WebGpuTimestampQueryResources | null,
+) => {
+  resources?.querySet.destroy();
+  resources?.resolveBuffer.destroy();
+};
+
+const formatDurationInMilliseconds = (durationInNanoseconds: bigint) => {
+  return `${(Number(durationInNanoseconds) / 1_000_000).toFixed(2)} ms`;
+};
+
+const formatRenderTimingLabel = ({
+  computeDurationInNanoseconds,
+  renderDurationInNanoseconds,
+  totalDurationInNanoseconds,
+}: {
+  computeDurationInNanoseconds: bigint;
+  renderDurationInNanoseconds: bigint;
+  totalDurationInNanoseconds: bigint;
+}) => {
+  return `GPU render ${formatDurationInMilliseconds(totalDurationInNanoseconds)} (compute ${formatDurationInMilliseconds(computeDurationInNanoseconds)}, raster ${formatDurationInMilliseconds(renderDurationInNanoseconds)})`;
+};
+
+const readTimestampPassDurations = async ({
+  device,
+  readbackBuffer,
+}: {
+  device: GPUDevice;
+  readbackBuffer: GPUBuffer;
+}) => {
+  try {
+    await device.queue.onSubmittedWorkDone();
+    await readbackBuffer.mapAsync(GPUMapMode.READ);
+
+    const timestampData = new BigUint64Array(readbackBuffer.getMappedRange().slice(0));
+
+    return {
+      computeDurationInNanoseconds: timestampData[1] - timestampData[0],
+      renderDurationInNanoseconds: timestampData[3] - timestampData[2],
+      totalDurationInNanoseconds: timestampData[3] - timestampData[0],
+    };
+  } finally {
+    if (readbackBuffer.mapState === "mapped") {
+      readbackBuffer.unmap();
+    }
+
+    readbackBuffer.destroy();
+  }
 };
 
 const logTileBuckets = async ({
@@ -241,7 +314,10 @@ const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
 
   invariant(adapter, "No compatible GPU adapter was found.");
 
-  const device = await adapter.requestDevice();
+  const timestampQuerySupported = adapter.features.has("timestamp-query");
+  const device = await adapter.requestDevice({
+    requiredFeatures: timestampQuerySupported ? ["timestamp-query"] : [],
+  });
   const uniformStride = roundUpToMultiple(
     shapeDemoUniformSizeInBytes,
     device.limits.minUniformBufferOffsetAlignment,
@@ -254,6 +330,7 @@ const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
     maxCubicBezierSegmentCount: framePayloadCounts.maxCubicBezierSegmentCount,
     maxShapeCount: framePayloadCounts.maxShapeCount,
     presentationFormat: navigator.gpu.getPreferredCanvasFormat(),
+    timestampQuerySupported,
     uniformStride,
   };
 };
@@ -268,6 +345,9 @@ export const WebGpuShapeDemoClient = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const currentFrameRef = useRef(currentFrame);
   const renderStateRef = useRef<WebGpuRenderState | null>(null);
+  const [renderTimingLabel, setRenderTimingLabel] = useState(
+    "GPU render timing unavailable.",
+  );
   const webGpuShapeDemoQuery = useQuery({
     queryKey: ["webgpu-shape-demo", squareDotLottieAssetUrl],
     queryFn: getWebGpuShapeDemoSetup,
@@ -297,6 +377,7 @@ export const WebGpuShapeDemoClient = ({
       maxCubicBezierSegmentCount,
       maxShapeCount,
       presentationFormat,
+      timestampQuerySupported,
       uniformStride,
     } = setup;
     const drawCapacity = Math.max(maxShapeCount, 1);
@@ -387,7 +468,18 @@ export const WebGpuShapeDemoClient = ({
       size: uniformStride * (drawCapacity + 1),
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
     });
+    const timestampQueryResources = timestampQuerySupported
+      ? createTimestampQueryResources(device)
+      : null;
     let tileBucketResources: WebGpuTileBucketResources | null = null;
+    let isDisposed = false;
+    let latestTimestampRequestId = 0;
+
+    setRenderTimingLabel(
+      timestampQueryResources
+        ? "Measuring GPU render time..."
+        : "GPU render timing unavailable on this device.",
+    );
 
     const drawFrame = (frame: number) => {
       const {
@@ -528,7 +620,17 @@ export const WebGpuShapeDemoClient = ({
       });
 
       const commandEncoder = device.createCommandEncoder();
-      const boundingBoxPass = commandEncoder.beginComputePass();
+      const boundingBoxPass = commandEncoder.beginComputePass(
+        timestampQueryResources
+          ? {
+              timestampWrites: {
+                beginningOfPassWriteIndex: 0,
+                endOfPassWriteIndex: 1,
+                querySet: timestampQueryResources.querySet,
+              },
+            }
+          : undefined,
+      );
 
       boundingBoxPass.setPipeline(tileBucketPipeline);
 
@@ -547,6 +649,13 @@ export const WebGpuShapeDemoClient = ({
             storeOp: "store",
           },
         ],
+        timestampWrites: timestampQueryResources
+          ? {
+              beginningOfPassWriteIndex: 2,
+              endOfPassWriteIndex: 3,
+              querySet: timestampQueryResources.querySet,
+            }
+          : undefined,
       });
 
       shapePass.setPipeline(finalRasterPipeline);
@@ -554,7 +663,56 @@ export const WebGpuShapeDemoClient = ({
       shapePass.draw(3);
       shapePass.end();
 
+      const timestampReadbackBuffer = timestampQueryResources
+        ? device.createBuffer({
+            size: timestampQueryBufferSize,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+          })
+        : null;
+
+      if (timestampQueryResources && timestampReadbackBuffer) {
+        commandEncoder.resolveQuerySet(
+          timestampQueryResources.querySet,
+          0,
+          timestampQueryCount,
+          timestampQueryResources.resolveBuffer,
+          0,
+        );
+        commandEncoder.copyBufferToBuffer(
+          timestampQueryResources.resolveBuffer,
+          0,
+          timestampReadbackBuffer,
+          0,
+          timestampQueryBufferSize,
+        );
+      }
+
       device.queue.submit([commandEncoder.finish()]);
+
+      if (timestampReadbackBuffer) {
+        latestTimestampRequestId += 1;
+
+        const timestampRequestId = latestTimestampRequestId;
+
+        void readTimestampPassDurations({
+          device,
+          readbackBuffer: timestampReadbackBuffer,
+        })
+          .then((durations) => {
+            if (isDisposed || timestampRequestId !== latestTimestampRequestId) {
+              return;
+            }
+
+            setRenderTimingLabel(formatRenderTimingLabel(durations));
+          })
+          .catch(() => {
+            if (isDisposed || timestampRequestId !== latestTimestampRequestId) {
+              return;
+            }
+
+            setRenderTimingLabel("GPU render timing failed.");
+          });
+      }
 
       if (!tileBucketResources.debugReadbackInFlight) {
         tileBucketResources.debugReadbackInFlight = true;
@@ -587,8 +745,10 @@ export const WebGpuShapeDemoClient = ({
     drawFrame(currentFrameRef.current);
 
     return () => {
+      isDisposed = true;
       resizeObserver.disconnect();
       destroyTileBucketResources(tileBucketResources);
+      destroyTimestampQueryResources(timestampQueryResources);
       shapeBuffer.destroy();
       cubicBezierSegmentBuffer.destroy();
       uniformBuffer.destroy();
@@ -611,6 +771,7 @@ export const WebGpuShapeDemoClient = ({
           className={compact ? `${styles.canvas} ${styles.canvasCompact}` : styles.canvas}
         />
       </div>
+      <p className={styles.renderTiming}>{renderTimingLabel}</p>
     </div>
   );
 };

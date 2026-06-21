@@ -30,15 +30,15 @@ export type GpuShapeRecord = {
   id: number;
   kind: number;
   flags: number;
-  paintIndex: number;
+  strokeLineCap: number;
   pathIndex: number;
-  mergeNodeIndex: number;
-  repeaterGroupIndex: number;
+  strokeLineJoin: number;
+  strokeBlendMode: number;
   reserved0: number;
   positionX: number;
   positionY: number;
-  anchorX: number;
-  anchorY: number;
+  strokeRed: number;
+  strokeGreen: number;
   scaleX: number;
   scaleY: number;
   rotation: number;
@@ -54,10 +54,10 @@ export type GpuShapeRecord = {
   radiusX: number;
   radiusY: number;
   cornerRadius: number;
-  roundRadius: number;
-  points: number;
-  innerRadius: number;
-  outerRadius: number;
+  strokeBlue: number;
+  strokeAlpha: number;
+  strokeWidth: number;
+  strokeMiterLimit: number;
   starInnerRoundness: number;
   starOuterRoundness: number;
   starAngle: number;
@@ -101,17 +101,17 @@ struct ShapeRecord {
   id: u32,
   kind: u32,
   flags: u32,
-  paintIndex: u32,
+  strokeLineCap: u32,
 
   pathIndex: u32,
-  mergeNodeIndex: u32,
-  repeaterGroupIndex: u32,
+  strokeLineJoin: u32,
+  strokeBlendMode: u32,
   reserved0: u32,
 
   positionX: f32,
   positionY: f32,
-  anchorX: f32,
-  anchorY: f32,
+  strokeRed: f32,
+  strokeGreen: f32,
 
   scaleX: f32,
   scaleY: f32,
@@ -131,11 +131,11 @@ struct ShapeRecord {
   radiusX: f32,
   radiusY: f32,
   cornerRadius: f32,
-  roundRadius: f32,
+  strokeBlue: f32,
 
-  points: f32,
-  innerRadius: f32,
-  outerRadius: f32,
+  strokeAlpha: f32,
+  strokeWidth: f32,
+  strokeMiterLimit: f32,
   starInnerRoundness: f32,
 
   starOuterRoundness: f32,
@@ -217,15 +217,15 @@ const gpuShapeRecordFieldLayout = [
   { field: "id", type: "u32" },
   { field: "kind", type: "u32" },
   { field: "flags", type: "u32" },
-  { field: "paintIndex", type: "u32" },
+  { field: "strokeLineCap", type: "u32" },
   { field: "pathIndex", type: "u32" },
-  { field: "mergeNodeIndex", type: "u32" },
-  { field: "repeaterGroupIndex", type: "u32" },
+  { field: "strokeLineJoin", type: "u32" },
+  { field: "strokeBlendMode", type: "u32" },
   { field: "reserved0", type: "u32" },
   { field: "positionX", type: "f32" },
   { field: "positionY", type: "f32" },
-  { field: "anchorX", type: "f32" },
-  { field: "anchorY", type: "f32" },
+  { field: "strokeRed", type: "f32" },
+  { field: "strokeGreen", type: "f32" },
   { field: "scaleX", type: "f32" },
   { field: "scaleY", type: "f32" },
   { field: "rotation", type: "f32" },
@@ -241,10 +241,10 @@ const gpuShapeRecordFieldLayout = [
   { field: "radiusX", type: "f32" },
   { field: "radiusY", type: "f32" },
   { field: "cornerRadius", type: "f32" },
-  { field: "roundRadius", type: "f32" },
-  { field: "points", type: "f32" },
-  { field: "innerRadius", type: "f32" },
-  { field: "outerRadius", type: "f32" },
+  { field: "strokeBlue", type: "f32" },
+  { field: "strokeAlpha", type: "f32" },
+  { field: "strokeWidth", type: "f32" },
+  { field: "strokeMiterLimit", type: "f32" },
   { field: "starInnerRoundness", type: "f32" },
   { field: "starOuterRoundness", type: "f32" },
   { field: "starAngle", type: "f32" },
@@ -294,15 +294,15 @@ export const createEmptyGpuShapeRecord = (): GpuShapeRecord => {
     id: 0,
     kind: gpuShapeKinds.rectangle,
     flags: 0,
-    paintIndex: 0,
+    strokeLineCap: 1,
     pathIndex: 0,
-    mergeNodeIndex: 0,
-    repeaterGroupIndex: 0,
+    strokeLineJoin: 1,
+    strokeBlendMode: 0,
     reserved0: 0,
     positionX: 0,
     positionY: 0,
-    anchorX: 0,
-    anchorY: 0,
+    strokeRed: 0,
+    strokeGreen: 0,
     scaleX: 1,
     scaleY: 1,
     rotation: 0,
@@ -318,10 +318,10 @@ export const createEmptyGpuShapeRecord = (): GpuShapeRecord => {
     radiusX: 0,
     radiusY: 0,
     cornerRadius: 0,
-    roundRadius: 0,
-    points: 0,
-    innerRadius: 0,
-    outerRadius: 0,
+    strokeBlue: 0,
+    strokeAlpha: 0,
+    strokeWidth: 0,
+    strokeMiterLimit: 4,
     starInnerRoundness: 0,
     starOuterRoundness: 0,
     starAngle: 0,

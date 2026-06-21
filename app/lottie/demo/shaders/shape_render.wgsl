@@ -52,6 +52,12 @@ fn tile_resolution() -> vec2u {
   return vec2u(max(demoUniforms.tileWidth, 1u), max(demoUniforms.tileHeight, 1u));
 }
 
+fn flipped_tile_y(tile_y: u32) -> u32 {
+  let tile_res = tile_resolution();
+
+  return tile_res.y - 1u - tile_y;
+}
+
 fn composition_position_from_canvas(pixel_pos: vec2f) -> vec2f {
   let safe_canvas = canvas_resolution();
   let safe_composition = composition_resolution();
@@ -113,16 +119,60 @@ fn random_color_from_primitive_id(primitive_id: u32) -> vec3f {
   return mix(vec3f(0.3), vec3f(1.0), color);
 }
 
-fn shape_color(shape: ShapeRecord) -> vec3f {
-  let fill_color = vec3f(shape.fillRed, shape.fillGreen, shape.fillBlue);
-  let has_visible_fill = shape.fillAlpha > 0.001;
+fn fill_color(shape: ShapeRecord) -> vec3f {
+  return vec3f(shape.fillRed, shape.fillGreen, shape.fillBlue);
+}
 
-  return select(random_color_from_primitive_id(shape.id), fill_color, has_visible_fill);
+fn stroke_color(shape: ShapeRecord) -> vec3f {
+  return vec3f(shape.strokeRed, shape.strokeGreen, shape.strokeBlue);
+}
+
+fn has_visible_fill(shape: ShapeRecord) -> bool {
+  return shape.fillAlpha > 0.001;
+}
+
+fn has_visible_stroke(shape: ShapeRecord) -> bool {
+  return shape.strokeAlpha > 0.001 && shape.strokeWidth > 0.001;
+}
+
+fn over(bottom: vec4f, top: vec4f) -> vec4f {
+  let out_alpha = top.a + bottom.a * (1.0 - top.a);
+
+  if (out_alpha <= 0.0001) {
+    return vec4f(0.0);
+  }
+
+  let out_premultiplied =
+    top.rgb * top.a + bottom.rgb * bottom.a * (1.0 - top.a);
+
+  return vec4f(out_premultiplied / out_alpha, out_alpha);
+}
+
+fn heatmap_color_from_ratio(ratio: f32) -> vec3f {
+  let t = clamp(ratio, 0.0, 1.0);
+
+  if (t < 0.25) {
+    return mix(vec3f(0.05, 0.08, 0.2), vec3f(0.0, 0.45, 1.0), t / 0.25);
+  }
+
+  if (t < 0.5) {
+    return mix(vec3f(0.0, 0.45, 1.0), vec3f(0.0, 0.9, 0.55), (t - 0.25) / 0.25);
+  }
+
+  if (t < 0.75) {
+    return mix(vec3f(0.0, 0.9, 0.55), vec3f(1.0, 0.85, 0.1), (t - 0.5) / 0.25);
+  }
+
+  return mix(vec3f(1.0, 0.85, 0.1), vec3f(1.0, 0.2, 0.1), (t - 0.75) / 0.25);
 }
 
 fn shape_bounds_padding(shape: ShapeRecord) -> f32 {
   if (shape.kind == SHAPE_KIND_PATH) {
     return max(shape.width * 0.5, 1.0);
+  }
+
+  if (has_visible_stroke(shape)) {
+    return max(shape.strokeWidth * 0.5, 0.75);
   }
 
   return 0.75;
@@ -165,9 +215,10 @@ fn shape_world_bounds(shape: ShapeRecord) -> vec4f {
 
 fn tile_canvas_bounds(tile_coord: vec2u) -> vec4f {
   let safe_canvas = canvas_resolution();
+  let tile_y = flipped_tile_y(tile_coord.y);
   let tile_min = vec2f(
     f32(tile_coord.x * TILE_SIZE_PX),
-    f32(tile_coord.y * TILE_SIZE_PX),
+    f32(tile_y * TILE_SIZE_PX),
   );
   let tile_max = min(tile_min + vec2f(f32(TILE_SIZE_PX)), safe_canvas);
 
@@ -240,17 +291,53 @@ fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
   return 1e6;
 }
 
-fn rasterized_shape_alpha(shape: ShapeRecord, pixel_pos: vec2f) -> f32 {
+fn rasterized_shape_sample(shape: ShapeRecord, pixel_pos: vec2f) -> vec4f {
   let local_p = shape_local_point(shape, pixel_pos);
 
   if (!point_in_shape_bounds(shape, local_p)) {
-    return 0.0;
+    return vec4f(0.0);
   }
 
   let aa_width = 0.75;
   let sd = evaluate_shape_sdf(shape, local_p);
+  let layer_opacity = clamp(shape.opacity, 0.0, 1.0);
 
-  return fill_from_sdf(sd, aa_width) * clamp(shape.opacity * shape.fillAlpha, 0.0, 1.0);
+  if (shape.kind == SHAPE_KIND_PATH) {
+    let alpha = fill_from_sdf(sd, aa_width) * clamp(layer_opacity * shape.strokeAlpha, 0.0, 1.0);
+
+    if (alpha <= 0.0) {
+      return vec4f(0.0);
+    }
+
+    return vec4f(stroke_color(shape), alpha);
+  }
+
+  let fill_alpha = select(
+    0.0,
+    fill_from_sdf(sd, aa_width) * clamp(layer_opacity * shape.fillAlpha, 0.0, 1.0),
+    has_visible_fill(shape),
+  );
+  let stroke_alpha = select(
+    0.0,
+    fill_from_sdf(abs(sd) - shape.strokeWidth * 0.5, aa_width) *
+      clamp(layer_opacity * shape.strokeAlpha, 0.0, 1.0),
+    has_visible_stroke(shape),
+  );
+  var sample = vec4f(0.0);
+
+  if (fill_alpha > 0.0) {
+    sample = over(sample, vec4f(fill_color(shape), fill_alpha));
+  }
+
+  if (stroke_alpha > 0.0) {
+    sample = over(sample, vec4f(stroke_color(shape), stroke_alpha));
+  }
+
+  if (sample.a <= 0.0001) {
+    return vec4f(random_color_from_primitive_id(shape.id), 0.0);
+  }
+
+  return sample;
 }
 
 fn tile_bucket_prepass(tile_coord: vec2u) {
@@ -272,26 +359,30 @@ fn rasterize_tiled_scene(pixel_pos: vec2f) -> vec4f {
   let tile_coord = min(
     vec2u(
       u32(min(max(pixel_pos.x, 0.0), safe_canvas.x - 0.0001) / f32(TILE_SIZE_PX)),
-      u32(min(max(pixel_pos.y, 0.0), safe_canvas.y - 0.0001) / f32(TILE_SIZE_PX)),
+      flipped_tile_y(
+        u32(min(max(pixel_pos.y, 0.0), safe_canvas.y - 0.0001) / f32(TILE_SIZE_PX)),
+      ),
     ),
     max_tile_coord,
   );
   let tile_index = tile_coord.y * tile_res.x + tile_coord.x;
   let shape_count = min(atomicLoad(&tileShapeCounts[tile_index]), demoUniforms.maxShapesPerTile);
-  var accumulated_color = random_color_from_primitive_id(tile_index);
+  let heatmap_ratio = f32(shape_count) / 8.0;
+  var accumulated_color = heatmap_color_from_ratio(heatmap_ratio);
   var accumulated_alpha = 1.0;
 
   for (var shape_index = 0u; shape_index < shape_count; shape_index = shape_index + 1u) {
     let primitive_index =
       tileShapeIndices[tile_index * demoUniforms.maxShapesPerTile + shape_index];
     let shape = shapeRecords[primitive_index];
-    let alpha = rasterized_shape_alpha(shape, pixel_pos);
+    let sample = rasterized_shape_sample(shape, pixel_pos);
+    let alpha = sample.a;
 
     if (alpha <= 0.0) {
       continue;
     }
 
-    let color = shape_color(shape);
+    let color = sample.rgb;
 
     accumulated_color = color * alpha + accumulated_color * (1.0 - alpha);
     accumulated_alpha = alpha + accumulated_alpha * (1.0 - alpha);

@@ -16,7 +16,8 @@ fn tileBucketPrepassComputeMain(@builtin(global_invocation_id) globalInvocationI
 
 @fragment
 fn finalRasterFragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-  let pixel_pos = input.position.xy;
+  let safe_canvas = canvas_resolution();
+  let pixel_pos = vec2f(input.uv.x * safe_canvas.x, input.uv.y * safe_canvas.y);
 
   return rasterize_tiled_scene(pixel_pos);
 }
