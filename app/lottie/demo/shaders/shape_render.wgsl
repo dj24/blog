@@ -1,12 +1,15 @@
 const SHAPE_KIND_RECTANGLE: u32 = 1u;
 const SHAPE_KIND_ELLIPSE: u32 = 2u;
 const SHAPE_KIND_PATH: u32 = 4u;
+const RENDER_MODE_BOUNDING_BOX: u32 = 0u;
+const RENDER_MODE_SDF: u32 = 1u;
 const CONTROL_POINT_RADIUS: vec2f = vec2f(32.0);
 
 struct DemoUniforms {
   activeShapeIndex: u32,
   shapeCount: u32,
-  reserved: vec2u,
+  renderMode: u32,
+  reserved: u32,
   canvasResolution: vec2f,
   compositionResolution: vec2f,
 }
@@ -82,6 +85,13 @@ fn shape_color(shape: ShapeRecord) -> vec3f {
   return random_color_from_primitive_id(shape.id);
 }
 
+fn point_in_shape_bounds(shape: ShapeRecord, local_p: vec2f) -> bool {
+  return local_p.x >= shape.boundsMinX &&
+    local_p.x <= shape.boundsMaxX &&
+    local_p.y >= shape.boundsMinY &&
+    local_p.y <= shape.boundsMaxY;
+}
+
 fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
   if (shape.kind == SHAPE_KIND_RECTANGLE) {
     let half_size = max(vec2f(shape.width, shape.height) * 0.5, vec2f(1.0, 1.0));
@@ -126,6 +136,13 @@ fn render_active_shape(pixel_pos: vec2f) -> vec4f {
 
   let shape = shapeRecords[demoUniforms.activeShapeIndex];
   let local_p = shape_local_point(shape, pixel_pos);
+
+  if (demoUniforms.renderMode == RENDER_MODE_BOUNDING_BOX) {
+    let alpha = select(0.0, 0.2, point_in_shape_bounds(shape, local_p));
+
+    return vec4f(shape_color(shape), alpha);
+  }
+
   let aa_width = max(length(fwidth(local_p)) * 0.5, 0.75);
   let sd = evaluate_shape_sdf(shape, local_p);
   let alpha = fill_from_sdf(sd, aa_width) * clamp(shape.opacity * shape.fillAlpha, 0.0, 1.0);

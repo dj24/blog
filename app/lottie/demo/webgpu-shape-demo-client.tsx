@@ -17,6 +17,9 @@ import styles from "./page.module.css";
 
 const shapeDemoUniformSizeInBytes = 32;
 const squareDotLottieAssetUrl = "/lottie/assets/square.lottie";
+const renderPassCount = 2;
+const renderModeBoundingBox = 0;
+const renderModeSdf = 1;
 
 const roundUpToMultiple = (value: number, multiple: number) => {
   return Math.ceil(value / multiple) * multiple;
@@ -26,6 +29,7 @@ const writeShapeDemoUniform = (
   view: DataView,
   byteOffset: number,
   activeShapeIndex: number,
+  renderMode: number,
   shapeCount: number,
   canvasWidth: number,
   canvasHeight: number,
@@ -34,7 +38,7 @@ const writeShapeDemoUniform = (
 ) => {
   view.setUint32(byteOffset, activeShapeIndex, true);
   view.setUint32(byteOffset + 4, shapeCount, true);
-  view.setUint32(byteOffset + 8, 0, true);
+  view.setUint32(byteOffset + 8, renderMode, true);
   view.setUint32(byteOffset + 12, 0, true);
   view.setFloat32(byteOffset + 16, canvasWidth, true);
   view.setFloat32(byteOffset + 20, canvasHeight, true);
@@ -249,7 +253,7 @@ export const WebGpuShapeDemoClient = ({
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
     });
     const uniformBuffer = device.createBuffer({
-      size: uniformStride * drawCapacity,
+      size: uniformStride * drawCapacity * renderPassCount,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
     });
     const bindGroup = device.createBindGroup({
@@ -310,7 +314,9 @@ export const WebGpuShapeDemoClient = ({
         );
       }
 
-      const uniformArrayBuffer = new ArrayBuffer(uniformStride * Math.max(shapeCount, 1));
+      const uniformArrayBuffer = new ArrayBuffer(
+        uniformStride * Math.max(shapeCount, 1) * renderPassCount,
+      );
       const uniformView = new DataView(uniformArrayBuffer);
 
       for (let index = 0; index < shapeCount; index += 1) {
@@ -318,6 +324,19 @@ export const WebGpuShapeDemoClient = ({
           uniformView,
           index * uniformStride,
           index,
+          renderModeBoundingBox,
+          shapeCount,
+          width,
+          height,
+          compositionWidth,
+          compositionHeight,
+        );
+
+        writeShapeDemoUniform(
+          uniformView,
+          uniformStride * drawCapacity + index * uniformStride,
+          index,
+          renderModeSdf,
           shapeCount,
           width,
           height,
@@ -329,7 +348,7 @@ export const WebGpuShapeDemoClient = ({
       device.queue.writeBuffer(uniformBuffer, 0, uniformArrayBuffer);
 
       const commandEncoder = device.createCommandEncoder();
-      const renderPass = commandEncoder.beginRenderPass({
+      const boundingBoxPass = commandEncoder.beginRenderPass({
         colorAttachments: [
           {
             view: context.getCurrentTexture().createView(),
@@ -340,20 +359,35 @@ export const WebGpuShapeDemoClient = ({
         ],
       });
 
-      renderPass.setPipeline(renderPipeline);
-
-      console.log("drawing ", shapeCount, " shapes", {
-        width,
-        height,
-        compositionWidth,
-        compositionHeight,
-      });
+      boundingBoxPass.setPipeline(renderPipeline);
 
       for (let index = 0; index < shapeCount; index += 1) {
-        renderPass.setBindGroup(0, bindGroup, [index * uniformStride]);
-        renderPass.draw(3);
+        boundingBoxPass.setBindGroup(0, bindGroup, [index * uniformStride]);
+        boundingBoxPass.draw(3);
       }
-      renderPass.end();
+      boundingBoxPass.end();
+
+      const shapePass = commandEncoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: context.getCurrentTexture().createView(),
+            loadOp: "load",
+            storeOp: "store",
+          },
+        ],
+      });
+
+      shapePass.setPipeline(renderPipeline);
+
+      for (let index = 0; index < shapeCount; index += 1) {
+        shapePass.setBindGroup(
+          0,
+          bindGroup,
+          [uniformStride * drawCapacity + index * uniformStride],
+        );
+        shapePass.draw(3);
+      }
+      shapePass.end();
 
       device.queue.submit([commandEncoder.finish()]);
     };
