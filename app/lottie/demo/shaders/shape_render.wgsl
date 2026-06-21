@@ -1,6 +1,7 @@
 const SHAPE_KIND_RECTANGLE: u32 = 1u;
 const SHAPE_KIND_ELLIPSE: u32 = 2u;
 const SHAPE_KIND_PATH: u32 = 4u;
+const CONTROL_POINT_RADIUS: vec2f = vec2f(32.0);
 
 struct DemoUniforms {
   activeShapeIndex: u32,
@@ -52,8 +53,33 @@ fn shape_local_point(shape: ShapeRecord, pixel_pos: vec2f) -> vec2f {
   return vec2f(local_p.x, -local_p.y);
 }
 
+fn hash_u32(value: u32) -> u32 {
+  var hashed = value;
+
+  hashed = (hashed ^ 61u) ^ (hashed >> 16u);
+  hashed = hashed * 9u;
+  hashed = hashed ^ (hashed >> 4u);
+  hashed = hashed * 0x27d4eb2du;
+  hashed = hashed ^ (hashed >> 15u);
+
+  return hashed;
+}
+
+fn random_color_from_primitive_id(primitive_id: u32) -> vec3f {
+  let red_hash = hash_u32(primitive_id);
+  let green_hash = hash_u32(primitive_id ^ 0x9e3779b9u);
+  let blue_hash = hash_u32(primitive_id ^ 0x85ebca6bu);
+  let color = vec3f(
+    f32(red_hash & 255u),
+    f32(green_hash & 255u),
+    f32(blue_hash & 255u),
+  ) / 255.0;
+
+  return mix(vec3f(0.3), vec3f(1.0), color);
+}
+
 fn shape_color(shape: ShapeRecord) -> vec3f {
-  return clamp(vec3f(shape.fillRed, shape.fillGreen, shape.fillBlue), vec3f(0.0), vec3f(1.0));
+  return random_color_from_primitive_id(shape.id);
 }
 
 fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {

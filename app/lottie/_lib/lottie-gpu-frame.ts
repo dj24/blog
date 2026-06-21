@@ -575,12 +575,7 @@ const quadraticControlPointFromTangents = (
   endTangentPoint: LottieVector2,
   fallbackControlPoint: LottieVector2,
 ) => {
-  const intersection = lineIntersection(
-    startPoint,
-    startTangentPoint,
-    endPoint,
-    endTangentPoint,
-  );
+  const intersection = lineIntersection(startPoint, startTangentPoint, endPoint, endTangentPoint);
 
   return intersection ?? fallbackControlPoint;
 };
@@ -824,7 +819,10 @@ const pathRecordFromShape = (
       [segment.c[0], -segment.c[1]],
     ];
     const bounds = boundsFromPoints(uploadedPoints);
-    const center: LottieVector2 = [(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2];
+    const center: LottieVector2 = [
+      (bounds.minX + bounds.maxX) / 2,
+      (bounds.minY + bounds.maxY) / 2,
+    ];
 
     return {
       bounds,
@@ -899,13 +897,7 @@ const shapeRecordsFromItem = (
           }
         }
 
-        return shapeRecordsFromItem(
-          child,
-          groupContext,
-          frame,
-          nextId,
-          allocateSegmentOffset,
-        );
+        return shapeRecordsFromItem(child, groupContext, frame, nextId, allocateSegmentOffset);
       }),
     );
   }
@@ -990,13 +982,7 @@ export const createLottieGpuFrame = (
 
         return mergeFlattenedGpuShapeBuffers(
           layer.shapes.map((shape) =>
-            shapeRecordsFromItem(
-              shape,
-              context,
-              frame,
-              nextId,
-              allocateSegmentOffset,
-            ),
+            shapeRecordsFromItem(shape, context, frame, nextId, allocateSegmentOffset),
           ),
         );
       }),
