@@ -85,6 +85,15 @@ export type GpuShapeRecord = {
   boundsMaxY: number;
 };
 
+export type GpuQuadraticBezierSegment = {
+  aX: number;
+  aY: number;
+  bX: number;
+  bY: number;
+  cX: number;
+  cY: number;
+};
+
 export const gpuShapeRecordWgsl = /* wgsl */ `
 struct ShapeRecord {
   id: u32,
@@ -161,13 +170,41 @@ struct ShapeRecord {
 @group(0) @binding(0) var<storage, read> shapeRecords: array<ShapeRecord>;
 `;
 
+export const gpuQuadraticBezierSegmentWgsl = /* wgsl */ `
+struct QuadraticBezierSegment {
+  aX: f32,
+  aY: f32,
+  bX: f32,
+  bY: f32,
+
+  cX: f32,
+  cY: f32,
+};
+
+@group(0) @binding(2) var<storage, read> quadraticBezierSegments: array<QuadraticBezierSegment>;
+`;
+
 const definitions = makeShaderDataDefinitions(gpuShapeRecordWgsl);
 const storageDefinition = definitions.storages.shapeRecords;
 const unsizedArrayElement = getSizeAndAlignmentOfUnsizedArrayElement(storageDefinition);
+const quadraticBezierDefinitions = makeShaderDataDefinitions(gpuQuadraticBezierSegmentWgsl);
+const quadraticBezierStorageDefinition =
+  quadraticBezierDefinitions.storages.quadraticBezierSegments;
+const quadraticBezierUnsizedArrayElement = getSizeAndAlignmentOfUnsizedArrayElement(
+  quadraticBezierStorageDefinition,
+);
 
 export const gpuShapeRecordStrideInBytes = unsizedArrayElement.size;
+export const gpuQuadraticBezierSegmentStrideInBytes = quadraticBezierUnsizedArrayElement.size;
 
 export type EncodedGpuShapeRecordBuffer = {
+  arrayBuffer: ArrayBuffer;
+  recordCount: number;
+  strideInBytes: number;
+  structuredView: StructuredView;
+};
+
+export type EncodedGpuQuadraticBezierSegmentBuffer = {
   arrayBuffer: ArrayBuffer;
   recordCount: number;
   strideInBytes: number;
@@ -236,6 +273,18 @@ const gpuShapeRecordFieldLayout = [
   type: "f32" | "u32";
 }[];
 
+const gpuQuadraticBezierSegmentFieldLayout = [
+  { field: "aX", type: "f32" },
+  { field: "aY", type: "f32" },
+  { field: "bX", type: "f32" },
+  { field: "bY", type: "f32" },
+  { field: "cX", type: "f32" },
+  { field: "cY", type: "f32" },
+] as const satisfies readonly {
+  field: keyof GpuQuadraticBezierSegment;
+  type: "f32";
+}[];
+
 export const createEmptyGpuShapeRecord = (): GpuShapeRecord => {
   return {
     id: 0,
@@ -297,11 +346,29 @@ export const createEmptyGpuShapeRecord = (): GpuShapeRecord => {
   };
 };
 
+export const createEmptyGpuQuadraticBezierSegment = (): GpuQuadraticBezierSegment => {
+  return {
+    aX: 0,
+    aY: 0,
+    bX: 0,
+    bY: 0,
+    cX: 0,
+    cY: 0,
+  };
+};
+
 export const createGpuShapeRecordStructuredView = (
   recordCount: number,
   arrayBuffer = new ArrayBuffer(recordCount * gpuShapeRecordStrideInBytes),
 ): StructuredView => {
   return makeStructuredView(storageDefinition, arrayBuffer);
+};
+
+export const createGpuQuadraticBezierSegmentStructuredView = (
+  recordCount: number,
+  arrayBuffer = new ArrayBuffer(recordCount * gpuQuadraticBezierSegmentStrideInBytes),
+): StructuredView => {
+  return makeStructuredView(quadraticBezierStorageDefinition, arrayBuffer);
 };
 
 export const encodeGpuShapeRecords = (
@@ -326,10 +393,37 @@ export const encodeGpuShapeRecords = (
 
   const structuredView = createGpuShapeRecordStructuredView(records.length, arrayBuffer);
 
+  console.log(structuredView.arrayBuffer.byteLength / 1024, "KB");
+
   return {
     arrayBuffer,
     recordCount: records.length,
     strideInBytes: gpuShapeRecordStrideInBytes,
+    structuredView,
+  };
+};
+
+export const encodeGpuQuadraticBezierSegments = (
+  records: readonly GpuQuadraticBezierSegment[],
+): EncodedGpuQuadraticBezierSegmentBuffer => {
+  const arrayBuffer = new ArrayBuffer(records.length * gpuQuadraticBezierSegmentStrideInBytes);
+  const view = new DataView(arrayBuffer);
+
+  records.forEach((record, recordIndex) => {
+    let byteOffset = recordIndex * gpuQuadraticBezierSegmentStrideInBytes;
+
+    gpuQuadraticBezierSegmentFieldLayout.forEach(({ field }) => {
+      view.setFloat32(byteOffset, record[field], true);
+      byteOffset += 4;
+    });
+  });
+
+  const structuredView = createGpuQuadraticBezierSegmentStructuredView(records.length, arrayBuffer);
+
+  return {
+    arrayBuffer,
+    recordCount: records.length,
+    strideInBytes: gpuQuadraticBezierSegmentStrideInBytes,
     structuredView,
   };
 };

@@ -131,8 +131,6 @@ const getLottiePageData = async (): Promise<LottiePageData> => {
     throw new Error(`Animation ${animationId} was not found in the bundled square.lottie asset.`);
   }
 
-  console.log(animation);
-
   return {
     animation,
     animationId,

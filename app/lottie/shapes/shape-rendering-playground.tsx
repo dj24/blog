@@ -189,15 +189,23 @@ const resolveGradientProperty = (property: LottieGradientStopValuesProperty): nu
   return property.a === 0 ? property.k : property.k[0]?.s ?? [];
 };
 
+const normalizeBezierGeometry = (
+  value: LottieBezierPathGeometry | [LottieBezierPathGeometry] | undefined,
+): LottieBezierPathGeometry => {
+  if (!value) {
+    return {
+      c: false,
+      v: [],
+      i: [],
+      o: [],
+    };
+  }
+
+  return Array.isArray(value) ? (value[0] ?? { c: false, v: [], i: [], o: [] }) : value;
+};
+
 const resolveBezierGeometry = (property: LottieBezierPathGeometryProperty): LottieBezierPathGeometry => {
-  return property.a === 0
-    ? property.k
-    : property.k[0]?.s ?? {
-        c: false,
-        v: [],
-        i: [],
-        o: [],
-      };
+  return property.a === 0 ? property.k : normalizeBezierGeometry(property.k[0]?.s);
 };
 
 const normalizeShape = (shape: KnownLottieShapeItem): EditableShape => {

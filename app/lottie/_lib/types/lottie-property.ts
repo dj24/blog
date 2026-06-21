@@ -159,6 +159,15 @@ export const lottieBezierPathGeometrySchema = z
 
 export type LottieBezierPathGeometry = z.infer<typeof lottieBezierPathGeometrySchema>;
 
+export const lottieBezierPathGeometryKeyframeValueSchema = z.union([
+  lottieBezierPathGeometrySchema,
+  z.tuple([lottieBezierPathGeometrySchema]),
+]);
+
+export type LottieBezierPathGeometryKeyframeValue = z.infer<
+  typeof lottieBezierPathGeometryKeyframeValueSchema
+>;
+
 export const lottieNumberPropertySchema = createLottiePropertySchema(z.number());
 
 export type LottieNumberProperty = LottieProperty<number>;
@@ -184,7 +193,11 @@ export const lottieGradientStopValuesPropertySchema =
 
 export type LottieGradientStopValuesProperty = LottieProperty<LottieGradientStopValues>;
 
-export const lottieBezierPathGeometryPropertySchema =
-  createLottiePropertySchema(lottieBezierPathGeometrySchema);
+export const lottieBezierPathGeometryPropertySchema = z.union([
+  createLottieStaticPropertySchema(lottieBezierPathGeometrySchema),
+  createLottieAnimatedPropertySchema(lottieBezierPathGeometryKeyframeValueSchema),
+]);
 
-export type LottieBezierPathGeometryProperty = LottieProperty<LottieBezierPathGeometry>;
+export type LottieBezierPathGeometryProperty =
+  | LottieStaticProperty<LottieBezierPathGeometry>
+  | LottieAnimatedProperty<LottieBezierPathGeometryKeyframeValue>;

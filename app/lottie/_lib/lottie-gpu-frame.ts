@@ -1,8 +1,16 @@
 import { match } from "ts-pattern";
-import { createEmptyGpuShapeRecord, gpuShapeKinds, type GpuShapeRecord } from "./gpu-shape-record";
+import {
+  createEmptyGpuQuadraticBezierSegment,
+  createEmptyGpuShapeRecord,
+  gpuShapeKinds,
+  type GpuQuadraticBezierSegment,
+  type GpuShapeRecord,
+} from "./gpu-shape-record";
 import type { LottieComposition } from "./types/lottie-composition";
 import type { LottieShapeLayer, LottieTransform } from "./types/lottie-layer";
 import type {
+  LottieBezierPathGeometry,
+  LottieBezierPathGeometryKeyframeValue,
   LottieColor,
   LottieGradientStopValues,
   LottieKeyframe,
@@ -15,6 +23,7 @@ import type {
   LottieEllipseShape,
   LottieFillShape,
   LottieGradientFillShape,
+  LottiePathShape,
   LottieRectangleShape,
   LottieShapeGroup,
   LottieTransformShape,
@@ -41,15 +50,28 @@ export type LottieGpuFrame = {
   compositionWidth: number;
   compositionHeight: number;
   shapeRecords: GpuShapeRecord[];
+  quadraticBezierSegments: GpuQuadraticBezierSegment[];
+};
+
+type FlattenedGpuShapeBuffers = {
+  shapeRecords: GpuShapeRecord[];
+  quadraticBezierSegments: GpuQuadraticBezierSegment[];
 };
 
 const identityMatrix: Matrix2d = [1, 0, 0, 1, 0, 0];
 const defaultPaint: Paint = {
-  color: [1, 1, 1],
+  color: [0, 0, 0],
   opacity: 1,
+};
+const defaultBezierPathGeometry: LottieBezierPathGeometry = {
+  c: false,
+  v: [],
+  i: [],
+  o: [],
 };
 const cubicBezierEpsilon = 0.000001;
 const cubicBezierIterations = 8;
+const pathStrokeWidth = 10;
 
 const multiplyMatrices = (left: Matrix2d, right: Matrix2d): Matrix2d => {
   return [
@@ -203,6 +225,52 @@ const isNumberArray = (value: unknown): value is number[] => {
   return Array.isArray(value) && value.every((item) => typeof item === "number");
 };
 
+const isVector2 = (value: unknown): value is LottieVector2 => {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === "number" &&
+    typeof value[1] === "number"
+  );
+};
+
+const isBezierPathGeometry = (value: unknown): value is LottieBezierPathGeometry => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<LottieBezierPathGeometry>;
+
+  return (
+    typeof candidate.c === "boolean" &&
+    Array.isArray(candidate.v) &&
+    Array.isArray(candidate.i) &&
+    Array.isArray(candidate.o) &&
+    candidate.v.every(isVector2) &&
+    candidate.i.every(isVector2) &&
+    candidate.o.every(isVector2)
+  );
+};
+
+const hasBezierPathGeometryValue = (
+  value: unknown,
+): value is LottieBezierPathGeometryKeyframeValue | LottieBezierPathGeometry => {
+  return (
+    isBezierPathGeometry(value) ||
+    (Array.isArray(value) && value.length > 0 && isBezierPathGeometry(value[0]))
+  );
+};
+
+const normalizeBezierPathGeometry = (
+  value: LottieBezierPathGeometryKeyframeValue | LottieBezierPathGeometry | undefined,
+): LottieBezierPathGeometry => {
+  if (hasBezierPathGeometryValue(value)) {
+    return Array.isArray(value) ? value[0] : value;
+  }
+
+  return defaultBezierPathGeometry;
+};
+
 const interpolateNumber = (from: number, to: number, progress: number) => {
   return from + (to - from) * progress;
 };
@@ -213,7 +281,48 @@ const interpolateArray = <TValue extends number[]>(from: TValue, to: TValue, pro
   ) as TValue;
 };
 
+const interpolateVector2Array = (
+  from: readonly LottieVector2[],
+  to: readonly LottieVector2[],
+  progress: number,
+) => {
+  return from.map((value, index) => {
+    const target = to[index] ?? value;
+
+    return [
+      interpolateNumber(value[0], target[0], progress),
+      interpolateNumber(value[1], target[1], progress),
+    ] as LottieVector2;
+  });
+};
+
+const interpolateBezierPathGeometry = (
+  fromValue: LottieBezierPathGeometryKeyframeValue | LottieBezierPathGeometry,
+  toValue: LottieBezierPathGeometryKeyframeValue | LottieBezierPathGeometry,
+  progress: number,
+): LottieBezierPathGeometry => {
+  const from = normalizeBezierPathGeometry(fromValue);
+  const to = normalizeBezierPathGeometry(toValue);
+  const matchingPointCounts =
+    from.v.length === to.v.length && from.i.length === to.i.length && from.o.length === to.o.length;
+
+  if (!matchingPointCounts) {
+    return from;
+  }
+
+  return {
+    c: from.c,
+    v: interpolateVector2Array(from.v, to.v, progress),
+    i: interpolateVector2Array(from.i, to.i, progress),
+    o: interpolateVector2Array(from.o, to.o, progress),
+  };
+};
+
 const interpolateValue = <TValue>(from: TValue, to: TValue, progress: number): TValue => {
+  if (hasBezierPathGeometryValue(from) && hasBezierPathGeometryValue(to)) {
+    return interpolateBezierPathGeometry(from, to, progress) as TValue;
+  }
+
   if (typeof from === "number" && typeof to === "number") {
     return interpolateNumber(from, to, progress) as TValue;
   }
@@ -372,6 +481,27 @@ const firstGradientColor = (stops: LottieGradientStopValues): LottieColor => {
   return [stops[1] ?? 1, stops[2] ?? 1, stops[3] ?? 1];
 };
 
+const emptyFlattenedGpuShapeBuffers = (): FlattenedGpuShapeBuffers => {
+  return {
+    shapeRecords: [],
+    quadraticBezierSegments: [],
+  };
+};
+
+const mergeFlattenedGpuShapeBuffers = (
+  frames: readonly FlattenedGpuShapeBuffers[],
+): FlattenedGpuShapeBuffers => {
+  return frames.reduce<FlattenedGpuShapeBuffers>((accumulator, frame) => {
+    return {
+      shapeRecords: [...accumulator.shapeRecords, ...frame.shapeRecords],
+      quadraticBezierSegments: [
+        ...accumulator.quadraticBezierSegments,
+        ...frame.quadraticBezierSegments,
+      ],
+    };
+  }, emptyFlattenedGpuShapeBuffers());
+};
+
 const paintFromItem = (item: LottieFillShape | LottieGradientFillShape, frame: number): Paint => {
   return match(item)
     .with({ ty: "fl" }, (fill) => {
@@ -387,6 +517,197 @@ const paintFromItem = (item: LottieFillShape | LottieGradientFillShape, frame: n
       };
     })
     .exhaustive();
+};
+
+const bezierPathGeometryFrom = (
+  shape: LottiePathShape,
+  frame: number,
+): LottieBezierPathGeometry => {
+  return normalizeBezierPathGeometry(evaluateProperty(shape.ks, frame));
+};
+
+const lerpPoint = (from: LottieVector2, to: LottieVector2, t: number): LottieVector2 => {
+  return [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t];
+};
+
+const lineIntersection = (
+  p0: LottieVector2,
+  p1: LottieVector2,
+  p2: LottieVector2,
+  p3: LottieVector2,
+): LottieVector2 | null => {
+  const direction0: LottieVector2 = [p1[0] - p0[0], p1[1] - p0[1]];
+  const direction1: LottieVector2 = [p3[0] - p2[0], p3[1] - p2[1]];
+  const determinant = direction0[0] * direction1[1] - direction0[1] * direction1[0];
+
+  if (Math.abs(determinant) <= cubicBezierEpsilon) {
+    return null;
+  }
+
+  const delta: LottieVector2 = [p2[0] - p0[0], p2[1] - p0[1]];
+  const t = (delta[0] * direction1[1] - delta[1] * direction1[0]) / determinant;
+
+  return [p0[0] + direction0[0] * t, p0[1] + direction0[1] * t];
+};
+
+const quadraticControlPointFromCubic = (
+  p0: LottieVector2,
+  c1: LottieVector2,
+  c2: LottieVector2,
+  p3: LottieVector2,
+): LottieVector2 => {
+  const intersection = lineIntersection(p0, c1, p3, c2);
+
+  if (intersection) {
+    return intersection;
+  }
+
+  return [
+    (3 * c1[0] - p0[0] + (3 * c2[0] - p3[0])) / 4,
+    (3 * c1[1] - p0[1] + (3 * c2[1] - p3[1])) / 4,
+  ];
+};
+
+const quadraticControlPointFromTangents = (
+  startPoint: LottieVector2,
+  startTangentPoint: LottieVector2,
+  endPoint: LottieVector2,
+  endTangentPoint: LottieVector2,
+  fallbackControlPoint: LottieVector2,
+) => {
+  const intersection = lineIntersection(
+    startPoint,
+    startTangentPoint,
+    endPoint,
+    endTangentPoint,
+  );
+
+  return intersection ?? fallbackControlPoint;
+};
+
+const createQuadraticBezierSegment = (
+  a: LottieVector2,
+  b: LottieVector2,
+  c: LottieVector2,
+): GpuQuadraticBezierSegment => {
+  const segment = createEmptyGpuQuadraticBezierSegment();
+
+  segment.aX = a[0];
+  segment.aY = a[1];
+  segment.bX = b[0];
+  segment.bY = b[1];
+  segment.cX = c[0];
+  segment.cY = c[1];
+
+  return segment;
+};
+
+const splitCubicBezierAtHalf = (
+  p0: LottieVector2,
+  c1: LottieVector2,
+  c2: LottieVector2,
+  p3: LottieVector2,
+) => {
+  const p01 = lerpPoint(p0, c1, 0.5);
+  const p12 = lerpPoint(c1, c2, 0.5);
+  const p23 = lerpPoint(c2, p3, 0.5);
+  const p012 = lerpPoint(p01, p12, 0.5);
+  const p123 = lerpPoint(p12, p23, 0.5);
+  const midpoint = lerpPoint(p012, p123, 0.5);
+
+  return [
+    { p0, c1: p01, c2: p012, p3: midpoint },
+    { p0: midpoint, c1: p123, c2: p23, p3 },
+  ];
+};
+
+const quadraticSegmentsFromCubic = (
+  p0: LottieVector2,
+  c1: LottieVector2,
+  c2: LottieVector2,
+  p3: LottieVector2,
+) => {
+  const [leftHalf, rightHalf] = splitCubicBezierAtHalf(p0, c1, c2, p3);
+  const midpoint = leftHalf.p3;
+  const midpointTangentPoint = leftHalf.c2;
+  const leftFallbackControlPoint = quadraticControlPointFromCubic(
+    leftHalf.p0,
+    leftHalf.c1,
+    leftHalf.c2,
+    leftHalf.p3,
+  );
+  const rightFallbackControlPoint = quadraticControlPointFromCubic(
+    rightHalf.p0,
+    rightHalf.c1,
+    rightHalf.c2,
+    rightHalf.p3,
+  );
+
+  return [
+    {
+      a: leftHalf.p0,
+      b: quadraticControlPointFromTangents(
+        leftHalf.p0,
+        leftHalf.c1,
+        midpoint,
+        midpointTangentPoint,
+        leftFallbackControlPoint,
+      ),
+      c: midpoint,
+    },
+    {
+      a: midpoint,
+      b: quadraticControlPointFromTangents(
+        midpoint,
+        midpointTangentPoint,
+        rightHalf.p3,
+        rightHalf.c2,
+        rightFallbackControlPoint,
+      ),
+      c: rightHalf.p3,
+    },
+  ];
+};
+
+const boundsFromPoints = (points: readonly LottieVector2[]) => {
+  return points.reduce(
+    (accumulator, point) => {
+      return {
+        minX: Math.min(accumulator.minX, point[0]),
+        minY: Math.min(accumulator.minY, point[1]),
+        maxX: Math.max(accumulator.maxX, point[0]),
+        maxY: Math.max(accumulator.maxY, point[1]),
+      };
+    },
+    {
+      minX: Number.POSITIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY,
+      maxX: Number.NEGATIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY,
+    },
+  );
+};
+
+const pathSegmentsFromGeometry = (geometry: LottieBezierPathGeometry) => {
+  const pointCount = geometry.v.length;
+
+  if (pointCount < 2 || geometry.i.length !== pointCount || geometry.o.length !== pointCount) {
+    return [];
+  }
+
+  const lastOpenIndex = geometry.c ? pointCount : pointCount - 1;
+
+  return Array.from({ length: lastOpenIndex }, (_, index) => {
+    const nextIndex = (index + 1) % pointCount;
+    const p0 = geometry.v[index] ?? [0, 0];
+    const p3 = geometry.v[nextIndex] ?? [0, 0];
+    const outgoing = geometry.o[index] ?? [0, 0];
+    const incoming = geometry.i[nextIndex] ?? [0, 0];
+    const c1: LottieVector2 = [p0[0] + outgoing[0], p0[1] + outgoing[1]];
+    const c2: LottieVector2 = [p3[0] + incoming[0], p3[1] + incoming[1]];
+
+    return quadraticSegmentsFromCubic(p0, c1, c2, p3);
+  }).flat();
 };
 
 const groupTransform = (group: LottieShapeGroup) => {
@@ -480,14 +801,86 @@ const ellipseRecordFromShape = (
   return record;
 };
 
+const pathRecordFromShape = (
+  shape: LottiePathShape,
+  context: WalkContext,
+  frame: number,
+  nextId: () => number,
+  allocateSegmentOffset: (segmentCount: number) => number,
+): FlattenedGpuShapeBuffers => {
+  const geometry = bezierPathGeometryFrom(shape, frame);
+  const segments = pathSegmentsFromGeometry(geometry);
+
+  if (segments.length === 0) {
+    return emptyFlattenedGpuShapeBuffers();
+  }
+
+  const paint = context.paint ?? defaultPaint;
+  const segmentOffset = allocateSegmentOffset(segments.length);
+  const segmentInstances = segments.map((segment, index) => {
+    const uploadedPoints: readonly LottieVector2[] = [
+      [segment.a[0], -segment.a[1]],
+      [segment.b[0], -segment.b[1]],
+      [segment.c[0], -segment.c[1]],
+    ];
+    const bounds = boundsFromPoints(uploadedPoints);
+    const center: LottieVector2 = [(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2];
+
+    return {
+      bounds,
+      center,
+      segmentIndex: segmentOffset + index,
+      uploadedPoints,
+    };
+  });
+
+  return {
+    shapeRecords: segmentInstances.map((segmentInstance) => {
+      const record = createBaseRecord({
+        context,
+        id: nextId(),
+        paint,
+        position: [segmentInstance.center[0], -segmentInstance.center[1]],
+      });
+
+      record.kind = gpuShapeKinds.path;
+      record.pathIndex = segmentInstance.segmentIndex;
+      record.width = pathStrokeWidth;
+      record.boundsMinX = segmentInstance.bounds.minX - segmentInstance.center[0];
+      record.boundsMinY = segmentInstance.bounds.minY - segmentInstance.center[1];
+      record.boundsMaxX = segmentInstance.bounds.maxX - segmentInstance.center[0];
+      record.boundsMaxY = segmentInstance.bounds.maxY - segmentInstance.center[1];
+
+      return record;
+    }),
+    quadraticBezierSegments: segmentInstances.map((segmentInstance) => {
+      return createQuadraticBezierSegment(
+        [
+          segmentInstance.uploadedPoints[0][0] - segmentInstance.center[0],
+          segmentInstance.uploadedPoints[0][1] - segmentInstance.center[1],
+        ],
+        [
+          segmentInstance.uploadedPoints[1][0] - segmentInstance.center[0],
+          segmentInstance.uploadedPoints[1][1] - segmentInstance.center[1],
+        ],
+        [
+          segmentInstance.uploadedPoints[2][0] - segmentInstance.center[0],
+          segmentInstance.uploadedPoints[2][1] - segmentInstance.center[1],
+        ],
+      );
+    }),
+  };
+};
+
 const shapeRecordsFromItem = (
   item: unknown,
   context: WalkContext,
   frame: number,
   nextId: () => number,
-): GpuShapeRecord[] => {
+  allocateSegmentOffset: (segmentCount: number) => number,
+): FlattenedGpuShapeBuffers => {
   if (!hasShapeType(item)) {
-    return [];
+    return emptyFlattenedGpuShapeBuffers();
   }
 
   if (item.ty === "gr") {
@@ -498,26 +891,52 @@ const shapeRecordsFromItem = (
       frame,
     );
 
-    return group.it.flatMap((child) => {
-      if (hasShapeType(child)) {
-        if (child.ty === "tr" || child.ty === "fl" || child.ty === "gf") {
-          return [];
+    return mergeFlattenedGpuShapeBuffers(
+      group.it.map((child) => {
+        if (hasShapeType(child)) {
+          if (child.ty === "tr" || child.ty === "fl" || child.ty === "gf") {
+            return emptyFlattenedGpuShapeBuffers();
+          }
         }
-      }
 
-      return shapeRecordsFromItem(child, groupContext, frame, nextId);
-    });
+        return shapeRecordsFromItem(
+          child,
+          groupContext,
+          frame,
+          nextId,
+          allocateSegmentOffset,
+        );
+      }),
+    );
   }
 
   if (item.ty === "rc") {
-    return [rectangleRecordFromShape(item as LottieRectangleShape, context, frame, nextId())];
+    return {
+      shapeRecords: [
+        rectangleRecordFromShape(item as LottieRectangleShape, context, frame, nextId()),
+      ],
+      quadraticBezierSegments: [],
+    };
   }
 
   if (item.ty === "el") {
-    return [ellipseRecordFromShape(item as LottieEllipseShape, context, frame, nextId())];
+    return {
+      shapeRecords: [ellipseRecordFromShape(item as LottieEllipseShape, context, frame, nextId())],
+      quadraticBezierSegments: [],
+    };
   }
 
-  return [];
+  if (item.ty === "sh") {
+    return pathRecordFromShape(
+      item as LottiePathShape,
+      context,
+      frame,
+      nextId,
+      allocateSegmentOffset,
+    );
+  }
+
+  return emptyFlattenedGpuShapeBuffers();
 };
 
 const isShapeLayer = (layer: unknown): layer is LottieShapeLayer => {
@@ -546,6 +965,7 @@ export const createLottieGpuFrame = (
   frame = composition.ip,
 ): LottieGpuFrame => {
   let id = 0;
+  let quadraticBezierSegmentIndex = 0;
   const nextId = () => {
     const currentId = id;
 
@@ -553,19 +973,39 @@ export const createLottieGpuFrame = (
 
     return currentId;
   };
+  const allocateSegmentOffset = (segmentCount: number) => {
+    const currentSegmentOffset = quadraticBezierSegmentIndex;
 
-  const shapeRecords = composition.layers
-    .filter(isShapeLayer)
-    .filter((layer) => layerIsVisible(layer, frame))
-    .flatMap((layer) => {
-      const context = contextFromLayer(layer, frame);
+    quadraticBezierSegmentIndex += segmentCount;
 
-      return layer.shapes.flatMap((shape) => shapeRecordsFromItem(shape, context, frame, nextId));
-    });
+    return currentSegmentOffset;
+  };
+
+  const flattened = mergeFlattenedGpuShapeBuffers(
+    composition.layers
+      .filter(isShapeLayer)
+      .filter((layer) => layerIsVisible(layer, frame))
+      .map((layer) => {
+        const context = contextFromLayer(layer, frame);
+
+        return mergeFlattenedGpuShapeBuffers(
+          layer.shapes.map((shape) =>
+            shapeRecordsFromItem(
+              shape,
+              context,
+              frame,
+              nextId,
+              allocateSegmentOffset,
+            ),
+          ),
+        );
+      }),
+  );
 
   return {
     compositionWidth: composition.w,
     compositionHeight: composition.h,
-    shapeRecords,
+    shapeRecords: flattened.shapeRecords,
+    quadraticBezierSegments: flattened.quadraticBezierSegments,
   };
 };

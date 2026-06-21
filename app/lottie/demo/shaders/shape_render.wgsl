@@ -1,5 +1,6 @@
 const SHAPE_KIND_RECTANGLE: u32 = 1u;
 const SHAPE_KIND_ELLIPSE: u32 = 2u;
+const SHAPE_KIND_PATH: u32 = 4u;
 
 struct DemoUniforms {
   activeShapeIndex: u32,
@@ -74,6 +75,19 @@ fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
     let radii = max(vec2f(shape.radiusX, shape.radiusY), vec2f(1.0, 1.0));
 
     return sd_ellipse(local_p, radii);
+  }
+
+  if (shape.kind == SHAPE_KIND_PATH) {
+    let half_stroke_width = max(shape.width, 0.001) * 0.5;
+    let segment = quadraticBezierSegments[shape.pathIndex];
+    let curve_distance = sd_quadratic_bezier(
+      local_p,
+      vec2f(segment.aX, segment.aY),
+      vec2f(segment.bX, segment.bY),
+      vec2f(segment.cX, segment.cY),
+    );
+
+    return abs(curve_distance) - half_stroke_width;
   }
 
   return 1e6;
