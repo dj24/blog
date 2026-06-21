@@ -8,6 +8,7 @@ import {
   encodeGpuCubicBezierSegments,
   encodeGpuShapeRecords,
   gpuCubicBezierSegmentStrideInBytes,
+  gpuPathTerminalFlags,
   gpuShapeRecordStrideInBytes,
   gpuShapeKinds,
 } from "./gpu-shape-record";
@@ -483,6 +484,7 @@ describe("Lottie GPU frame conversion", () => {
       pathShapes.map((record) => record.pathIndex),
       [0, 1, 2],
     );
+    assert.ok(pathShapes.every((record) => record.flags === 0));
     assert.ok(pathShapes.every((record) => record.width === 10));
     assertApproximatelyEqual(pathShapes[0]?.positionX ?? 0, 100);
     assertApproximatelyEqual(pathShapes[0]?.positionY ?? 0, 80);
@@ -500,10 +502,13 @@ describe("Lottie GPU frame conversion", () => {
 
   test("does not append a closing segment for open paths", () => {
     const frame = createLottieGpuFrame(createStaticPathAnimation(false), 0);
+    const pathShapes = frame.shapeRecords.filter((record) => record.kind === gpuShapeKinds.path);
 
     assert.equal(frame.shapeRecords.length, 2);
     assert.equal(frame.cubicBezierSegments.length, 2);
-    assert.equal(frame.shapeRecords.filter((record) => record.kind === gpuShapeKinds.path).length, 2);
+    assert.equal(pathShapes.length, 2);
+    assert.equal(pathShapes[0]?.flags, gpuPathTerminalFlags.start);
+    assert.equal(pathShapes[1]?.flags, gpuPathTerminalFlags.end);
   });
 
   test("packs solid fill and solid stroke into the same rectangle record", () => {
@@ -533,6 +538,10 @@ describe("Lottie GPU frame conversion", () => {
     const pathRecord = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.path);
 
     assert.ok(pathRecord);
+    assert.equal(
+      pathRecord.flags,
+      gpuPathTerminalFlags.start | gpuPathTerminalFlags.end,
+    );
     assertApproximatelyEqual(pathRecord.width, 14);
     assertApproximatelyEqual(pathRecord.fillAlpha, 0);
     assertApproximatelyEqual(pathRecord.strokeRed, 0.25);
@@ -554,6 +563,7 @@ describe("Lottie GPU frame conversion", () => {
 
     assert.equal(encodedShapeRecords.recordCount, 3);
     assert.equal(encodedShapeRecords.strideInBytes, gpuShapeRecordStrideInBytes);
+    assert.equal(shapeView.getUint32(8, true), 0);
     assert.equal(shapeView.getUint32(16, true), 0);
     assert.equal(shapeView.getUint32(gpuShapeRecordStrideInBytes + 16, true), 1);
     assert.equal(encodedSegments.recordCount, 3);
@@ -610,6 +620,18 @@ describe("Lottie GPU frame conversion", () => {
     assert.equal(startFrame.shapeRecords.length, 1);
     assert.equal(midFrame.shapeRecords.length, 1);
     assert.equal(endFrame.shapeRecords.length, 1);
+    assert.equal(
+      startFrame.shapeRecords[0]?.flags,
+      gpuPathTerminalFlags.start | gpuPathTerminalFlags.end,
+    );
+    assert.equal(
+      midFrame.shapeRecords[0]?.flags,
+      gpuPathTerminalFlags.start | gpuPathTerminalFlags.end,
+    );
+    assert.equal(
+      endFrame.shapeRecords[0]?.flags,
+      gpuPathTerminalFlags.start | gpuPathTerminalFlags.end,
+    );
     assert.deepEqual(
       startFrame.shapeRecords.map((record) => record.pathIndex),
       [0],

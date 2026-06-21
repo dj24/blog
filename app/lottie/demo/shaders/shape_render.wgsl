@@ -1,6 +1,11 @@
 const SHAPE_KIND_RECTANGLE: u32 = 1u;
 const SHAPE_KIND_ELLIPSE: u32 = 2u;
 const SHAPE_KIND_PATH: u32 = 4u;
+const PATH_TERMINAL_START: u32 = 1u;
+const PATH_TERMINAL_END: u32 = 2u;
+const STROKE_CAP_BUTT: u32 = 1u;
+const STROKE_CAP_ROUND: u32 = 2u;
+const STROKE_CAP_SQUARE: u32 = 3u;
 const TILE_SIZE_PX: u32 = 32u;
 
 struct DemoUniforms {
@@ -68,8 +73,10 @@ fn composition_position_from_canvas(pixel_pos: vec2f) -> vec2f {
   );
 }
 
-fn shape_local_point(shape: ShapeRecord, pixel_pos: vec2f) -> vec2f {
-  let composition_pos = composition_position_from_canvas(pixel_pos);
+fn shape_local_point_from_composition_position(
+  shape: ShapeRecord,
+  composition_pos: vec2f,
+) -> vec2f {
   let shape_center = vec2f(
     shape.centerX + shape.positionX,
     shape.centerY + shape.positionY,
@@ -81,6 +88,13 @@ fn shape_local_point(shape: ShapeRecord, pixel_pos: vec2f) -> vec2f {
   local_p = vec2f(local_p.x / safe_scale.x, local_p.y / safe_scale.y);
 
   return vec2f(local_p.x, -local_p.y);
+}
+
+fn shape_local_point(shape: ShapeRecord, pixel_pos: vec2f) -> vec2f {
+  return shape_local_point_from_composition_position(
+    shape,
+    composition_position_from_canvas(pixel_pos),
+  );
 }
 
 fn composition_point_from_shape_local(shape: ShapeRecord, local_p: vec2f) -> vec2f {
@@ -133,6 +147,43 @@ fn has_visible_fill(shape: ShapeRecord) -> bool {
 
 fn has_visible_stroke(shape: ShapeRecord) -> bool {
   return shape.strokeAlpha > 0.001 && shape.strokeWidth > 0.001;
+}
+
+fn has_path_terminal_flag(shape: ShapeRecord, terminal_flag: u32) -> bool {
+  return (shape.flags & terminal_flag) != 0u;
+}
+
+fn safe_normalize_or_fallback(direction: vec2f, fallback: vec2f) -> vec2f {
+  let direction_length = length(direction);
+
+  if (direction_length > 0.0001) {
+    return direction / direction_length;
+  }
+
+  let fallback_length = length(fallback);
+
+  if (fallback_length > 0.0001) {
+    return fallback / fallback_length;
+  }
+
+  return vec2f(1.0, 0.0);
+}
+
+fn cubic_start_tangent(p0: vec2f, c1: vec2f, c2: vec2f, p3: vec2f) -> vec2f {
+  return safe_normalize_or_fallback(c1 - p0, safe_normalize_or_fallback(c2 - p0, p3 - p0));
+}
+
+fn cubic_end_tangent(p0: vec2f, c1: vec2f, c2: vec2f, p3: vec2f) -> vec2f {
+  return safe_normalize_or_fallback(p3 - c2, safe_normalize_or_fallback(p3 - c1, p3 - p0));
+}
+
+fn endpoint_clip_sdf(
+  local_p: vec2f,
+  endpoint: vec2f,
+  inward_tangent: vec2f,
+  extension: f32,
+) -> f32 {
+  return dot(endpoint - local_p, inward_tangent) - extension;
 }
 
 fn over(bottom: vec4f, top: vec4f) -> vec4f {
@@ -233,7 +284,7 @@ fn tile_composition_bounds(tile_coord: vec2u) -> vec4f {
   return vec4f(min(p0, p1), max(p0, p1));
 }
 
-fn tile_intersects_shape(tile_coord: vec2u, shape: ShapeRecord) -> bool {
+fn tile_intersects_shape_bounds(tile_coord: vec2u, shape: ShapeRecord) -> bool {
   let tile_bounds = tile_composition_bounds(tile_coord);
   let shape_bounds = shape_world_bounds(shape);
 
@@ -241,6 +292,41 @@ fn tile_intersects_shape(tile_coord: vec2u, shape: ShapeRecord) -> bool {
     shape_bounds.x <= tile_bounds.z &&
     shape_bounds.w >= tile_bounds.y &&
     shape_bounds.y <= tile_bounds.w;
+}
+
+fn tile_intersects_shape_sdf(tile_coord: vec2u, shape: ShapeRecord) -> bool {
+  let tile_bounds = tile_composition_bounds(tile_coord);
+  let tile_center = (tile_bounds.xy + tile_bounds.zw) * 0.5;
+  let local_tile_center = shape_local_point_from_composition_position(shape, tile_center);
+  let local_tile_corner0 =
+    shape_local_point_from_composition_position(shape, vec2f(tile_bounds.x, tile_bounds.y));
+  let local_tile_corner1 =
+    shape_local_point_from_composition_position(shape, vec2f(tile_bounds.z, tile_bounds.y));
+  let local_tile_corner2 =
+    shape_local_point_from_composition_position(shape, vec2f(tile_bounds.z, tile_bounds.w));
+  let local_tile_corner3 =
+    shape_local_point_from_composition_position(shape, vec2f(tile_bounds.x, tile_bounds.w));
+  let cover_radius = max(
+    max(
+      length(local_tile_corner0 - local_tile_center),
+      length(local_tile_corner1 - local_tile_center),
+    ),
+    max(
+      length(local_tile_corner2 - local_tile_center),
+      length(local_tile_corner3 - local_tile_center),
+    ),
+  ) * 2.0;
+  let sd = evaluate_shape_sdf(shape, local_tile_center);
+
+  return sd <= cover_radius;
+}
+
+fn tile_intersects_shape(tile_coord: vec2u, shape: ShapeRecord) -> bool {
+  if (!tile_intersects_shape_bounds(tile_coord, shape)) {
+    return false;
+  }
+
+  return tile_intersects_shape_sdf(tile_coord, shape);
 }
 
 fn append_shape_to_tile(tile_coord: vec2u, shape_index: u32) {
@@ -251,6 +337,31 @@ fn append_shape_to_tile(tile_coord: vec2u, shape_index: u32) {
   if (bucket_index < demoUniforms.maxShapesPerTile) {
     tileShapeIndices[tile_index * demoUniforms.maxShapesPerTile + bucket_index] = shape_index;
   }
+}
+
+fn path_cap_clipping_sdf(shape: ShapeRecord, local_p: vec2f, segment: CubicBezierSegment, half_stroke_width: f32) -> f32 {
+  if (shape.strokeLineCap == STROKE_CAP_ROUND) {
+    return -1e6;
+  }
+
+  let p0 = vec2f(segment.p0X, segment.p0Y);
+  let c1 = vec2f(segment.c1X, segment.c1Y);
+  let c2 = vec2f(segment.c2X, segment.c2Y);
+  let p3 = vec2f(segment.p3X, segment.p3Y);
+  let start_tangent = cubic_start_tangent(p0, c1, c2, p3);
+  let end_tangent = cubic_end_tangent(p0, c1, c2, p3);
+  let cap_extension = select(half_stroke_width, 0.0, shape.strokeLineCap == STROKE_CAP_BUTT);
+  var clip_sdf = -1e6;
+
+  if (has_path_terminal_flag(shape, PATH_TERMINAL_START)) {
+    clip_sdf = max(clip_sdf, endpoint_clip_sdf(local_p, p0, start_tangent, cap_extension));
+  }
+
+  if (has_path_terminal_flag(shape, PATH_TERMINAL_END)) {
+    clip_sdf = max(clip_sdf, endpoint_clip_sdf(local_p, p3, -end_tangent, cap_extension));
+  }
+
+  return clip_sdf;
 }
 
 fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
@@ -284,8 +395,10 @@ fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
       vec2f(segment.c2X, segment.c2Y),
       vec2f(segment.p3X, segment.p3Y),
     );
+    let stroke_sdf = abs(curve_distance) - half_stroke_width;
+    let clip_sdf = path_cap_clipping_sdf(shape, local_p, segment, half_stroke_width);
 
-    return abs(curve_distance) - half_stroke_width;
+    return max(stroke_sdf, clip_sdf);
   }
 
   return 1e6;

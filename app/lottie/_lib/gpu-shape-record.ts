@@ -26,6 +26,11 @@ export const gpuShapeKinds = {
   path: 4,
 } as const;
 
+export const gpuPathTerminalFlags = {
+  start: 1 << 0,
+  end: 1 << 1,
+} as const;
+
 export type GpuShapeRecord = {
   id: number;
   kind: number;

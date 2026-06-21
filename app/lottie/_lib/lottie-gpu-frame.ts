@@ -2,6 +2,7 @@ import { match } from "ts-pattern";
 import {
   createEmptyGpuCubicBezierSegment,
   createEmptyGpuShapeRecord,
+  gpuPathTerminalFlags,
   gpuShapeKinds,
   type GpuCubicBezierSegment,
   type GpuShapeRecord,
@@ -754,6 +755,7 @@ const pathRecordFromShape = (
   }
 
   const segmentOffset = allocateSegmentOffset(segments.length);
+  const isOpenPath = !geometry.c;
   const segmentInstances = segments.map((segment, index) => {
     const uploadedPoints: readonly LottieVector2[] = [
       [segment.p0[0], -segment.p0[1]],
@@ -790,6 +792,11 @@ const pathRecordFromShape = (
       });
 
       record.kind = gpuShapeKinds.path;
+      record.flags =
+        (isOpenPath && segmentInstance.segmentIndex === segmentOffset ? gpuPathTerminalFlags.start : 0) |
+        (isOpenPath && segmentInstance.segmentIndex === segmentOffset + segments.length - 1
+          ? gpuPathTerminalFlags.end
+          : 0);
       record.pathIndex = segmentInstance.segmentIndex;
       record.width = pathStroke.width;
       record.boundsMinX = segmentInstance.bounds.minX - segmentInstance.center[0];

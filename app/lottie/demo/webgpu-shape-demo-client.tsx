@@ -620,7 +620,7 @@ export const WebGpuShapeDemoClient = ({
       });
 
       const commandEncoder = device.createCommandEncoder();
-      const boundingBoxPass = commandEncoder.beginComputePass(
+      const tileBucketPass = commandEncoder.beginComputePass(
         timestampQueryResources
           ? {
               timestampWrites: {
@@ -632,13 +632,13 @@ export const WebGpuShapeDemoClient = ({
           : undefined,
       );
 
-      boundingBoxPass.setPipeline(tileBucketPipeline);
+      tileBucketPass.setPipeline(tileBucketPipeline);
 
       for (let index = 0; index < shapeCount; index += 1) {
-        boundingBoxPass.setBindGroup(0, bindGroup, [index * uniformStride]);
-        boundingBoxPass.dispatchWorkgroups(Math.ceil(tileWidth / 8), Math.ceil(tileHeight / 8));
+        tileBucketPass.setBindGroup(0, bindGroup, [index * uniformStride]);
+        tileBucketPass.dispatchWorkgroups(Math.ceil(tileWidth / 8), Math.ceil(tileHeight / 8));
       }
-      boundingBoxPass.end();
+      tileBucketPass.end();
 
       const shapePass = commandEncoder.beginRenderPass({
         colorAttachments: [
