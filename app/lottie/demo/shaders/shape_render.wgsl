@@ -165,6 +165,14 @@ fn has_visible_stroke(shape: ShapeRecord) -> bool {
   return shape.strokeAlpha > 0.001 && shape.strokeWidth > 0.001;
 }
 
+fn centered_stroke_fill_inset(shape: ShapeRecord) -> f32 {
+  if (!has_visible_stroke(shape)) {
+    return 0.0;
+  }
+
+  return shape.strokeWidth * 0.5;
+}
+
 fn has_path_terminal_flag(shape: ShapeRecord, terminal_flag: u32) -> bool {
   return (shape.flags & terminal_flag) != 0u;
 }
@@ -464,9 +472,10 @@ fn rasterized_shape_sample(shape: ShapeRecord, pixel_pos: vec2f) -> vec4f {
     return vec4f(stroke_color(shape), alpha);
   }
 
+  let fill_inset = centered_stroke_fill_inset(shape);
   let fill_alpha = select(
     0.0,
-    fill_from_sdf(sd, aa_width) * clamp(layer_opacity * shape.fillAlpha, 0.0, 1.0),
+    fill_from_sdf(sd + fill_inset, aa_width) * clamp(layer_opacity * shape.fillAlpha, 0.0, 1.0),
     has_visible_fill(shape),
   );
   let stroke_alpha = select(
