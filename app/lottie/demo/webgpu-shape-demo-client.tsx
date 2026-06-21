@@ -20,6 +20,9 @@ const squareDotLottieAssetUrl = "/lottie/assets/square.lottie";
 const tileSize = 32;
 const timestampQueryCount = 4;
 const timestampQueryBufferSize = timestampQueryCount * BigUint64Array.BYTES_PER_ELEMENT;
+const tileInstructionStrideInBytes = 16;
+const indirectDispatchArgsSizeInBytes = 4 * Uint32Array.BYTES_PER_ELEMENT;
+const enableTileBucketDebugReadback = false;
 
 const roundUpToMultiple = (value: number, multiple: number) => {
   return Math.ceil(value / multiple) * multiple;
@@ -91,9 +94,11 @@ type WebGpuRenderState = {
 type WebGpuTileBucketResources = {
   debugReadbackInFlight: boolean;
   tileHeight: number;
+  tileInstructionBuffer: GPUBuffer;
   tileShapeCountBuffer: GPUBuffer;
   tileShapeIndexBuffer: GPUBuffer;
   tileWidth: number;
+  indirectDispatchArgsBuffer: GPUBuffer;
   zeroTileShapeCounts: ArrayBuffer;
 };
 
@@ -120,8 +125,10 @@ const getTileDimensions = (canvasWidth: number, canvasHeight: number) => {
 };
 
 const destroyTileBucketResources = (resources: WebGpuTileBucketResources | null) => {
+  resources?.tileInstructionBuffer.destroy();
   resources?.tileShapeCountBuffer.destroy();
   resources?.tileShapeIndexBuffer.destroy();
+  resources?.indirectDispatchArgsBuffer.destroy();
 };
 
 const destroyRasterTargetResources = (
@@ -414,7 +421,61 @@ export const WebGpuShapeDemoClient = ({
         canvasFormat === "bgra8unorm" ? "bgra8unorm" : "rgba8unorm",
     });
     const shaderModule = device.createShaderModule({ code: shaderCode });
-    const bindGroupLayout = device.createBindGroupLayout({
+    const compactionBindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "read-only-storage",
+          },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "uniform",
+            hasDynamicOffset: true,
+          },
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "read-only-storage",
+          },
+        },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "storage",
+          },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "storage",
+          },
+        },
+        {
+          binding: 6,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "storage",
+          },
+        },
+        {
+          binding: 7,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "storage",
+          },
+        },
+      ],
+    });
+    const renderBindGroupLayout = device.createBindGroupLayout({
       entries: [
         {
           binding: 0,
@@ -460,20 +521,44 @@ export const WebGpuShapeDemoClient = ({
             format: canvasFormat,
           },
         },
+        {
+          binding: 6,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "storage",
+          },
+        },
       ],
     });
-    const pipelineLayout = device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
+    const compactionPipelineLayout = device.createPipelineLayout({
+      bindGroupLayouts: [compactionBindGroupLayout],
+    });
+    const renderPipelineLayout = device.createPipelineLayout({
+      bindGroupLayouts: [renderBindGroupLayout],
     });
     const tileBucketPipeline = device.createComputePipeline({
-      layout: pipelineLayout,
+      layout: compactionPipelineLayout,
       compute: {
         module: shaderModule,
         entryPoint: "tileBucketPrepassComputeMain",
       },
     });
+    const tileInstructionCompactionPipeline = device.createComputePipeline({
+      layout: compactionPipelineLayout,
+      compute: {
+        module: shaderModule,
+        entryPoint: "tileInstructionCompactionComputeMain",
+      },
+    });
+    const clearRasterPipeline = device.createComputePipeline({
+      layout: renderPipelineLayout,
+      compute: {
+        module: shaderModule,
+        entryPoint: "clearRasterTargetComputeMain",
+      },
+    });
     const finalRasterPipeline = device.createComputePipeline({
-      layout: pipelineLayout,
+      layout: renderPipelineLayout,
       compute: {
         module: shaderModule,
         entryPoint: "finalRasterComputeMain",
@@ -496,6 +581,7 @@ export const WebGpuShapeDemoClient = ({
       : null;
     let tileBucketResources: WebGpuTileBucketResources | null = null;
     let rasterTargetResources: WebGpuRasterTargetResources | null = null;
+    let isContextConfigured = false;
     let isDisposed = false;
     let latestTimestampRequestId = 0;
 
@@ -517,16 +603,22 @@ export const WebGpuShapeDemoClient = ({
       const width = Math.max(1, Math.floor(canvas.clientWidth * devicePixelRatio));
       const height = Math.max(1, Math.floor(canvas.clientHeight * devicePixelRatio));
       const { tileHeight, tileWidth } = getTileDimensions(width, height);
+      const canvasSizeChanged = canvas.width !== width || canvas.height !== height;
 
-      canvas.width = width;
-      canvas.height = height;
+      if (canvasSizeChanged) {
+        canvas.width = width;
+        canvas.height = height;
+      }
 
-      context.configure({
-        device,
-        format: canvasFormat,
-        alphaMode: "premultiplied",
-        usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-      });
+      if (!isContextConfigured || canvasSizeChanged) {
+        context.configure({
+          device,
+          format: canvasFormat,
+          alphaMode: "premultiplied",
+          usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+        isContextConfigured = true;
+      }
 
       if (
         !tileBucketResources ||
@@ -540,6 +632,10 @@ export const WebGpuShapeDemoClient = ({
         tileBucketResources = {
           debugReadbackInFlight: false,
           tileHeight,
+          tileInstructionBuffer: device.createBuffer({
+            size: tileCount * tileInstructionStrideInBytes,
+            usage: GPUBufferUsage.STORAGE,
+          }),
           tileShapeCountBuffer: device.createBuffer({
             size: tileCount * Uint32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC | GPUBufferUsage.STORAGE,
@@ -549,6 +645,10 @@ export const WebGpuShapeDemoClient = ({
             usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.STORAGE,
           }),
           tileWidth,
+          indirectDispatchArgsBuffer: device.createBuffer({
+            size: indirectDispatchArgsSizeInBytes,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE,
+          }),
           zeroTileShapeCounts: new ArrayBuffer(tileCount * Uint32Array.BYTES_PER_ELEMENT),
         };
       }
@@ -631,8 +731,56 @@ export const WebGpuShapeDemoClient = ({
         tileBucketResources.zeroTileShapeCounts,
       );
 
-      const bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
+      const compactionBindGroup = device.createBindGroup({
+        layout: compactionBindGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: {
+              buffer: shapeBuffer,
+            },
+          },
+          {
+            binding: 1,
+            resource: {
+              buffer: uniformBuffer,
+              size: shapeDemoUniformSizeInBytes,
+            },
+          },
+          {
+            binding: 2,
+            resource: {
+              buffer: cubicBezierSegmentBuffer,
+            },
+          },
+          {
+            binding: 3,
+            resource: {
+              buffer: tileBucketResources.tileShapeCountBuffer,
+            },
+          },
+          {
+            binding: 4,
+            resource: {
+              buffer: tileBucketResources.tileShapeIndexBuffer,
+            },
+          },
+          {
+            binding: 6,
+            resource: {
+              buffer: tileBucketResources.tileInstructionBuffer,
+            },
+          },
+          {
+            binding: 7,
+            resource: {
+              buffer: tileBucketResources.indirectDispatchArgsBuffer,
+            },
+          },
+        ],
+      });
+      const renderBindGroup = device.createBindGroup({
+        layout: renderBindGroupLayout,
         entries: [
           {
             binding: 0,
@@ -669,11 +817,22 @@ export const WebGpuShapeDemoClient = ({
             binding: 5,
             resource: rasterTargetResources.textureView,
           },
+          {
+            binding: 6,
+            resource: {
+              buffer: tileBucketResources.tileInstructionBuffer,
+            },
+          },
         ],
       });
 
-      const commandEncoder = device.createCommandEncoder();
-      const tileBucketPass = commandEncoder.beginComputePass(
+      const tileBucketCommandEncoder = device.createCommandEncoder();
+      tileBucketCommandEncoder.clearBuffer(
+        tileBucketResources.indirectDispatchArgsBuffer,
+        0,
+        indirectDispatchArgsSizeInBytes,
+      );
+      const tileBucketPass = tileBucketCommandEncoder.beginComputePass(
         timestampQueryResources
           ? {
               timestampWrites: {
@@ -688,12 +847,24 @@ export const WebGpuShapeDemoClient = ({
       tileBucketPass.setPipeline(tileBucketPipeline);
 
       for (let index = 0; index < shapeCount; index += 1) {
-        tileBucketPass.setBindGroup(0, bindGroup, [index * uniformStride]);
+        tileBucketPass.setBindGroup(0, compactionBindGroup, [index * uniformStride]);
         tileBucketPass.dispatchWorkgroups(Math.ceil(tileWidth / 8), Math.ceil(tileHeight / 8));
       }
+      tileBucketPass.setPipeline(tileInstructionCompactionPipeline);
+      tileBucketPass.setBindGroup(0, compactionBindGroup, [finalPassUniformOffset]);
+      tileBucketPass.dispatchWorkgroups(Math.ceil(tileWidth / 8), Math.ceil(tileHeight / 8));
       tileBucketPass.end();
+      device.queue.submit([tileBucketCommandEncoder.finish()]);
 
-      const shapePass = commandEncoder.beginComputePass(
+      const rasterCommandEncoder = device.createCommandEncoder();
+      const clearPass = rasterCommandEncoder.beginComputePass();
+
+      clearPass.setPipeline(clearRasterPipeline);
+      clearPass.setBindGroup(0, renderBindGroup, [finalPassUniformOffset]);
+      clearPass.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
+      clearPass.end();
+
+      const shapePass = rasterCommandEncoder.beginComputePass(
         timestampQueryResources
           ? {
               timestampWrites: {
@@ -706,11 +877,11 @@ export const WebGpuShapeDemoClient = ({
       );
 
       shapePass.setPipeline(finalRasterPipeline);
-      shapePass.setBindGroup(0, bindGroup, [finalPassUniformOffset]);
-      shapePass.dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
+      shapePass.setBindGroup(0, renderBindGroup, [finalPassUniformOffset]);
+      shapePass.dispatchWorkgroupsIndirect(tileBucketResources.indirectDispatchArgsBuffer, 0);
       shapePass.end();
 
-      commandEncoder.copyTextureToTexture(
+      rasterCommandEncoder.copyTextureToTexture(
         {
           texture: rasterTargetResources.texture,
         },
@@ -732,14 +903,14 @@ export const WebGpuShapeDemoClient = ({
         : null;
 
       if (timestampQueryResources && timestampReadbackBuffer) {
-        commandEncoder.resolveQuerySet(
+        rasterCommandEncoder.resolveQuerySet(
           timestampQueryResources.querySet,
           0,
           timestampQueryCount,
           timestampQueryResources.resolveBuffer,
           0,
         );
-        commandEncoder.copyBufferToBuffer(
+        rasterCommandEncoder.copyBufferToBuffer(
           timestampQueryResources.resolveBuffer,
           0,
           timestampReadbackBuffer,
@@ -748,7 +919,7 @@ export const WebGpuShapeDemoClient = ({
         );
       }
 
-      device.queue.submit([commandEncoder.finish()]);
+      device.queue.submit([rasterCommandEncoder.finish()]);
 
       if (timestampReadbackBuffer) {
         latestTimestampRequestId += 1;
@@ -775,7 +946,7 @@ export const WebGpuShapeDemoClient = ({
           });
       }
 
-      if (!tileBucketResources.debugReadbackInFlight) {
+      if (enableTileBucketDebugReadback && !tileBucketResources.debugReadbackInFlight) {
         tileBucketResources.debugReadbackInFlight = true;
 
         void logTileBuckets({

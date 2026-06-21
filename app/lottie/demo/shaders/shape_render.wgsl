@@ -23,9 +23,25 @@ struct DemoUniforms {
   reserved2: u32,
 }
 
+struct TileInstruction {
+  tileIndex: u32,
+  tileX: u32,
+  tileY: u32,
+  reserved0: u32,
+}
+
+struct IndirectDispatchArgs {
+  dispatchX: atomic<u32>,
+  dispatchY: u32,
+  dispatchZ: u32,
+  reserved0: u32,
+}
+
 @group(0) @binding(1) var<uniform> demoUniforms: DemoUniforms;
 @group(0) @binding(3) var<storage, read_write> tileShapeCounts: array<atomic<u32>>;
 @group(0) @binding(4) var<storage, read_write> tileShapeIndices: array<u32>;
+@group(0) @binding(6) var<storage, read_write> tileInstructions: array<TileInstruction>;
+@group(0) @binding(7) var<storage, read_write> indirectDispatchArgs: IndirectDispatchArgs;
 
 fn fill_from_sdf(sd: f32, aa_width: f32) -> f32 {
   let aa = max(aa_width, 0.75);
@@ -202,6 +218,10 @@ fn over(bottom: vec4f, top: vec4f) -> vec4f {
 fn heatmap_color_from_ratio(ratio: f32) -> vec3f {
   let t = clamp(ratio, 0.0, 1.0);
 
+  if (t<0.001){
+    return vec3(0.0);
+  }
+
   if (t < 0.25) {
     return mix(vec3f(0.05, 0.08, 0.2), vec3f(0.0, 0.45, 1.0), t / 0.25);
   }
@@ -339,6 +359,25 @@ fn append_shape_to_tile(tile_coord: vec2u, shape_index: u32) {
   }
 }
 
+fn compact_tile_instruction(tile_coord: vec2u) {
+  let tile_res = tile_resolution();
+  let tile_index = tile_coord.y * tile_res.x + tile_coord.x;
+  let shape_count = min(atomicLoad(&tileShapeCounts[tile_index]), demoUniforms.maxShapesPerTile);
+
+  if (shape_count == 0u) {
+    return;
+  }
+
+  let instruction_index = atomicAdd(&indirectDispatchArgs.dispatchX, 1u);
+
+  tileInstructions[instruction_index] = TileInstruction(
+    tile_index,
+    tile_coord.x,
+    tile_coord.y,
+    0u,
+  );
+}
+
 fn path_cap_clipping_sdf(shape: ShapeRecord, local_p: vec2f, segment: CubicBezierSegment, half_stroke_width: f32) -> f32 {
   if (shape.strokeLineCap == STROKE_CAP_ROUND) {
     return -1e6;
@@ -465,11 +504,12 @@ fn tile_bucket_prepass(tile_coord: vec2u) {
   }
 }
 
-fn rasterize_tiled_scene(pixel_pos: vec2f) -> vec4f {
+fn tile_coord_from_pixel_pos(pixel_pos: vec2f) -> vec2u {
   let safe_canvas = canvas_resolution();
   let tile_res = tile_resolution();
   let max_tile_coord = vec2u(tile_res.x - 1u, tile_res.y - 1u);
-  let tile_coord = min(
+
+  return min(
     vec2u(
       u32(min(max(pixel_pos.x, 0.0), safe_canvas.x - 0.0001) / f32(TILE_SIZE_PX)),
       flipped_tile_y(
@@ -478,6 +518,18 @@ fn rasterize_tiled_scene(pixel_pos: vec2f) -> vec4f {
     ),
     max_tile_coord,
   );
+}
+
+fn tiled_scene_shape_count(pixel_pos: vec2f) -> u32 {
+  let tile_res = tile_resolution();
+  let tile_coord = tile_coord_from_pixel_pos(pixel_pos);
+  let tile_index = tile_coord.y * tile_res.x + tile_coord.x;
+
+  return min(atomicLoad(&tileShapeCounts[tile_index]), demoUniforms.maxShapesPerTile);
+}
+
+fn rasterize_tiled_scene_for_tile(pixel_pos: vec2f, tile_coord: vec2u) -> vec4f {
+  let tile_res = tile_resolution();
   let tile_index = tile_coord.y * tile_res.x + tile_coord.x;
   let shape_count = min(atomicLoad(&tileShapeCounts[tile_index]), demoUniforms.maxShapesPerTile);
   let heatmap_ratio = f32(shape_count) / 8.0;
@@ -502,4 +554,8 @@ fn rasterize_tiled_scene(pixel_pos: vec2f) -> vec4f {
   }
 
   return vec4f(accumulated_color, accumulated_alpha);
+}
+
+fn rasterize_tiled_scene(pixel_pos: vec2f) -> vec4f {
+  return rasterize_tiled_scene_for_tile(pixel_pos, tile_coord_from_pixel_pos(pixel_pos));
 }
