@@ -15,11 +15,9 @@ import type { LottieComposition } from "../_lib/types/lottie-composition";
 import { buildShapeDemoShaderSource } from "./shape-demo-shader-source";
 import styles from "./page.module.css";
 
-const shapeDemoUniformSizeInBytes = 32;
+const shapeDemoUniformSizeInBytes = 48;
 const squareDotLottieAssetUrl = "/lottie/assets/square.lottie";
-const renderPassCount = 2;
-const renderModeBoundingBox = 0;
-const renderModeSdf = 1;
+const tileSize = 32;
 
 const roundUpToMultiple = (value: number, multiple: number) => {
   return Math.ceil(value / multiple) * multiple;
@@ -28,22 +26,40 @@ const roundUpToMultiple = (value: number, multiple: number) => {
 const writeShapeDemoUniform = (
   view: DataView,
   byteOffset: number,
-  activeShapeIndex: number,
-  renderMode: number,
-  shapeCount: number,
-  canvasWidth: number,
-  canvasHeight: number,
-  compositionWidth: number,
-  compositionHeight: number,
+  {
+    activeShapeIndex,
+    canvasHeight,
+    canvasWidth,
+    compositionHeight,
+    compositionWidth,
+    maxShapesPerTile,
+    shapeCount,
+    tileHeight,
+    tileWidth,
+  }: {
+    activeShapeIndex: number;
+    canvasHeight: number;
+    canvasWidth: number;
+    compositionHeight: number;
+    compositionWidth: number;
+    maxShapesPerTile: number;
+    shapeCount: number;
+    tileHeight: number;
+    tileWidth: number;
+  },
 ) => {
   view.setUint32(byteOffset, activeShapeIndex, true);
   view.setUint32(byteOffset + 4, shapeCount, true);
-  view.setUint32(byteOffset + 8, renderMode, true);
+  view.setUint32(byteOffset + 8, maxShapesPerTile, true);
   view.setUint32(byteOffset + 12, 0, true);
   view.setFloat32(byteOffset + 16, canvasWidth, true);
   view.setFloat32(byteOffset + 20, canvasHeight, true);
   view.setFloat32(byteOffset + 24, compositionWidth, true);
   view.setFloat32(byteOffset + 28, compositionHeight, true);
+  view.setUint32(byteOffset + 32, tileWidth, true);
+  view.setUint32(byteOffset + 36, tileHeight, true);
+  view.setUint32(byteOffset + 40, 0, true);
+  view.setUint32(byteOffset + 44, 0, true);
 };
 
 type WebGpuShapeDemoSetup = {
@@ -67,6 +83,112 @@ type WebGpuRenderState = {
   context: GPUCanvasContext;
   drawFrame: (frame: number) => void;
   resizeObserver: ResizeObserver;
+};
+
+type WebGpuTileBucketResources = {
+  debugReadbackInFlight: boolean;
+  tileHeight: number;
+  tileShapeCountBuffer: GPUBuffer;
+  tileShapeIndexBuffer: GPUBuffer;
+  tileWidth: number;
+  zeroTileShapeCounts: ArrayBuffer;
+};
+
+const getTileDimensions = (canvasWidth: number, canvasHeight: number) => {
+  const tileWidth = Math.max(1, Math.ceil(canvasWidth / tileSize));
+  const tileHeight = Math.max(1, Math.ceil(canvasHeight / tileSize));
+
+  return {
+    tileHeight,
+    tileWidth,
+  };
+};
+
+const destroyTileBucketResources = (resources: WebGpuTileBucketResources | null) => {
+  resources?.tileShapeCountBuffer.destroy();
+  resources?.tileShapeIndexBuffer.destroy();
+};
+
+const logTileBuckets = async ({
+  device,
+  maxShapesPerTile,
+  tileHeight,
+  tileShapeCountBuffer,
+  tileShapeIndexBuffer,
+  tileWidth,
+}: {
+  device: GPUDevice;
+  maxShapesPerTile: number;
+  tileHeight: number;
+  tileShapeCountBuffer: GPUBuffer;
+  tileShapeIndexBuffer: GPUBuffer;
+  tileWidth: number;
+}) => {
+  const tileCount = tileWidth * tileHeight;
+  const tileCountSizeInBytes = tileCount * Uint32Array.BYTES_PER_ELEMENT;
+  const tileIndexSizeInBytes =
+    tileCount * maxShapesPerTile * Uint32Array.BYTES_PER_ELEMENT;
+  const tileShapeCountReadbackBuffer = device.createBuffer({
+    size: tileCountSizeInBytes,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  });
+  const tileShapeIndexReadbackBuffer = device.createBuffer({
+    size: tileIndexSizeInBytes,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  });
+  const commandEncoder = device.createCommandEncoder();
+
+  commandEncoder.copyBufferToBuffer(
+    tileShapeCountBuffer,
+    0,
+    tileShapeCountReadbackBuffer,
+    0,
+    tileCountSizeInBytes,
+  );
+  commandEncoder.copyBufferToBuffer(
+    tileShapeIndexBuffer,
+    0,
+    tileShapeIndexReadbackBuffer,
+    0,
+    tileIndexSizeInBytes,
+  );
+
+  device.queue.submit([commandEncoder.finish()]);
+  await device.queue.onSubmittedWorkDone();
+
+  await Promise.all([
+    tileShapeCountReadbackBuffer.mapAsync(GPUMapMode.READ),
+    tileShapeIndexReadbackBuffer.mapAsync(GPUMapMode.READ),
+  ]);
+
+  const countData = new Uint32Array(tileShapeCountReadbackBuffer.getMappedRange().slice(0));
+  const indexData = new Uint32Array(tileShapeIndexReadbackBuffer.getMappedRange().slice(0));
+  const buckets = Array.from({ length: tileCount }, (_, tileIndex) => {
+    const rawCount = countData[tileIndex] ?? 0;
+    const clampedCount = Math.min(rawCount, maxShapesPerTile);
+    const bucketOffset = tileIndex * maxShapesPerTile;
+    const shapeIndices = Array.from(
+      indexData.slice(bucketOffset, bucketOffset + clampedCount),
+    );
+
+    return {
+      shapeIndices,
+      tileIndex,
+      x: tileIndex % tileWidth,
+      y: Math.floor(tileIndex / tileWidth),
+    };
+  });
+
+  console.log("tile buckets", {
+    buckets,
+    tileHeight,
+    tileWidth,
+  });
+
+  tileShapeCountReadbackBuffer.unmap();
+  tileShapeIndexReadbackBuffer.unmap();
+  tileShapeCountReadbackBuffer.destroy();
+  tileShapeIndexReadbackBuffer.destroy();
 };
 
 const getShapeFrameData = (animation: LottieComposition, frame: number): WebGpuShapeFrameData => {
@@ -188,14 +310,14 @@ export const WebGpuShapeDemoClient = ({
       entries: [
         {
           binding: 0,
-          visibility: GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
           buffer: {
             type: "read-only-storage",
           },
         },
         {
           binding: 1,
-          visibility: GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
           buffer: {
             type: "uniform",
             hasDynamicOffset: true,
@@ -203,9 +325,23 @@ export const WebGpuShapeDemoClient = ({
         },
         {
           binding: 2,
-          visibility: GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
           buffer: {
             type: "read-only-storage",
+          },
+        },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+          buffer: {
+            type: "storage",
+          },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+          buffer: {
+            type: "storage",
           },
         },
       ],
@@ -213,7 +349,14 @@ export const WebGpuShapeDemoClient = ({
     const pipelineLayout = device.createPipelineLayout({
       bindGroupLayouts: [bindGroupLayout],
     });
-    const renderPipeline = device.createRenderPipeline({
+    const tileBucketPipeline = device.createComputePipeline({
+      layout: pipelineLayout,
+      compute: {
+        module: shaderModule,
+        entryPoint: "tileBucketPrepassComputeMain",
+      },
+    });
+    const finalRasterPipeline = device.createRenderPipeline({
       layout: pipelineLayout,
       vertex: {
         module: shaderModule,
@@ -221,22 +364,10 @@ export const WebGpuShapeDemoClient = ({
       },
       fragment: {
         module: shaderModule,
-        entryPoint: "fragmentMain",
+        entryPoint: "finalRasterFragmentMain",
         targets: [
           {
             format: presentationFormat,
-            blend: {
-              color: {
-                operation: "add",
-                srcFactor: "src-alpha",
-                dstFactor: "one-minus-src-alpha",
-              },
-              alpha: {
-                operation: "add",
-                srcFactor: "one",
-                dstFactor: "one-minus-src-alpha",
-              },
-            },
           },
         ],
       },
@@ -253,33 +384,10 @@ export const WebGpuShapeDemoClient = ({
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
     });
     const uniformBuffer = device.createBuffer({
-      size: uniformStride * drawCapacity * renderPassCount,
+      size: uniformStride * (drawCapacity + 1),
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
     });
-    const bindGroup = device.createBindGroup({
-      layout: bindGroupLayout,
-      entries: [
-        {
-          binding: 0,
-          resource: {
-            buffer: shapeBuffer,
-          },
-        },
-        {
-          binding: 1,
-          resource: {
-            buffer: uniformBuffer,
-            size: shapeDemoUniformSizeInBytes,
-          },
-        },
-        {
-          binding: 2,
-          resource: {
-            buffer: cubicBezierSegmentBuffer,
-          },
-        },
-      ],
-    });
+    let tileBucketResources: WebGpuTileBucketResources | null = null;
 
     const drawFrame = (frame: number) => {
       const {
@@ -292,6 +400,7 @@ export const WebGpuShapeDemoClient = ({
       const devicePixelRatio = window.devicePixelRatio || 1;
       const width = Math.max(1, Math.floor(canvas.clientWidth * devicePixelRatio));
       const height = Math.max(1, Math.floor(canvas.clientHeight * devicePixelRatio));
+      const { tileHeight, tileWidth } = getTileDimensions(width, height);
 
       canvas.width = width;
       canvas.height = height;
@@ -301,6 +410,31 @@ export const WebGpuShapeDemoClient = ({
         format: presentationFormat,
         alphaMode: "premultiplied",
       });
+
+      if (
+        !tileBucketResources ||
+        tileBucketResources.tileWidth !== tileWidth ||
+        tileBucketResources.tileHeight !== tileHeight
+      ) {
+        destroyTileBucketResources(tileBucketResources);
+
+        const tileCount = tileWidth * tileHeight;
+
+        tileBucketResources = {
+          debugReadbackInFlight: false,
+          tileHeight,
+          tileShapeCountBuffer: device.createBuffer({
+            size: tileCount * Uint32Array.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC | GPUBufferUsage.STORAGE,
+          }),
+          tileShapeIndexBuffer: device.createBuffer({
+            size: tileCount * drawCapacity * Uint32Array.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.STORAGE,
+          }),
+          tileWidth,
+          zeroTileShapeCounts: new ArrayBuffer(tileCount * Uint32Array.BYTES_PER_ELEMENT),
+        };
+      }
 
       if (encodedShapeRecords.arrayBuffer.byteLength > 0) {
         device.queue.writeBuffer(shapeBuffer, 0, encodedShapeRecords.arrayBuffer);
@@ -314,41 +448,97 @@ export const WebGpuShapeDemoClient = ({
         );
       }
 
-      const uniformArrayBuffer = new ArrayBuffer(
-        uniformStride * Math.max(shapeCount, 1) * renderPassCount,
-      );
+      const uniformArrayBuffer = new ArrayBuffer(uniformStride * (drawCapacity + 1));
       const uniformView = new DataView(uniformArrayBuffer);
 
       for (let index = 0; index < shapeCount; index += 1) {
         writeShapeDemoUniform(
           uniformView,
           index * uniformStride,
-          index,
-          renderModeBoundingBox,
-          shapeCount,
-          width,
-          height,
-          compositionWidth,
-          compositionHeight,
-        );
-
-        writeShapeDemoUniform(
-          uniformView,
-          uniformStride * drawCapacity + index * uniformStride,
-          index,
-          renderModeSdf,
-          shapeCount,
-          width,
-          height,
-          compositionWidth,
-          compositionHeight,
+          {
+            activeShapeIndex: index,
+            canvasHeight: height,
+            canvasWidth: width,
+            compositionHeight,
+            compositionWidth,
+            maxShapesPerTile: drawCapacity,
+            shapeCount,
+            tileHeight,
+            tileWidth,
+          },
         );
       }
 
+      const finalPassUniformOffset = uniformStride * drawCapacity;
+
+      writeShapeDemoUniform(uniformView, finalPassUniformOffset, {
+        activeShapeIndex: 0,
+        canvasHeight: height,
+        canvasWidth: width,
+        compositionHeight,
+        compositionWidth,
+        maxShapesPerTile: drawCapacity,
+        shapeCount,
+        tileHeight,
+        tileWidth,
+      });
+
       device.queue.writeBuffer(uniformBuffer, 0, uniformArrayBuffer);
+      device.queue.writeBuffer(
+        tileBucketResources.tileShapeCountBuffer,
+        0,
+        tileBucketResources.zeroTileShapeCounts,
+      );
+
+      const bindGroup = device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+          {
+            binding: 0,
+            resource: {
+              buffer: shapeBuffer,
+            },
+          },
+          {
+            binding: 1,
+            resource: {
+              buffer: uniformBuffer,
+              size: shapeDemoUniformSizeInBytes,
+            },
+          },
+          {
+            binding: 2,
+            resource: {
+              buffer: cubicBezierSegmentBuffer,
+            },
+          },
+          {
+            binding: 3,
+            resource: {
+              buffer: tileBucketResources.tileShapeCountBuffer,
+            },
+          },
+          {
+            binding: 4,
+            resource: {
+              buffer: tileBucketResources.tileShapeIndexBuffer,
+            },
+          },
+        ],
+      });
 
       const commandEncoder = device.createCommandEncoder();
-      const boundingBoxPass = commandEncoder.beginRenderPass({
+      const boundingBoxPass = commandEncoder.beginComputePass();
+
+      boundingBoxPass.setPipeline(tileBucketPipeline);
+
+      for (let index = 0; index < shapeCount; index += 1) {
+        boundingBoxPass.setBindGroup(0, bindGroup, [index * uniformStride]);
+        boundingBoxPass.dispatchWorkgroups(Math.ceil(tileWidth / 8), Math.ceil(tileHeight / 8));
+      }
+      boundingBoxPass.end();
+
+      const shapePass = commandEncoder.beginRenderPass({
         colorAttachments: [
           {
             view: context.getCurrentTexture().createView(),
@@ -359,37 +549,29 @@ export const WebGpuShapeDemoClient = ({
         ],
       });
 
-      boundingBoxPass.setPipeline(renderPipeline);
-
-      for (let index = 0; index < shapeCount; index += 1) {
-        boundingBoxPass.setBindGroup(0, bindGroup, [index * uniformStride]);
-        boundingBoxPass.draw(3);
-      }
-      boundingBoxPass.end();
-
-      const shapePass = commandEncoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: context.getCurrentTexture().createView(),
-            loadOp: "load",
-            storeOp: "store",
-          },
-        ],
-      });
-
-      shapePass.setPipeline(renderPipeline);
-
-      for (let index = 0; index < shapeCount; index += 1) {
-        shapePass.setBindGroup(
-          0,
-          bindGroup,
-          [uniformStride * drawCapacity + index * uniformStride],
-        );
-        shapePass.draw(3);
-      }
+      shapePass.setPipeline(finalRasterPipeline);
+      shapePass.setBindGroup(0, bindGroup, [finalPassUniformOffset]);
+      shapePass.draw(3);
       shapePass.end();
 
       device.queue.submit([commandEncoder.finish()]);
+
+      if (!tileBucketResources.debugReadbackInFlight) {
+        tileBucketResources.debugReadbackInFlight = true;
+
+        void logTileBuckets({
+          device,
+          maxShapesPerTile: drawCapacity,
+          tileHeight,
+          tileShapeCountBuffer: tileBucketResources.tileShapeCountBuffer,
+          tileShapeIndexBuffer: tileBucketResources.tileShapeIndexBuffer,
+          tileWidth,
+        }).finally(() => {
+          if (tileBucketResources) {
+            tileBucketResources.debugReadbackInFlight = false;
+          }
+        });
+      }
     };
 
     const resizeObserver = new ResizeObserver(() => {
@@ -406,6 +588,10 @@ export const WebGpuShapeDemoClient = ({
 
     return () => {
       resizeObserver.disconnect();
+      destroyTileBucketResources(tileBucketResources);
+      shapeBuffer.destroy();
+      cubicBezierSegmentBuffer.destroy();
+      uniformBuffer.destroy();
 
       if (renderStateRef.current?.context === context) {
         renderStateRef.current = null;

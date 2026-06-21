@@ -3,14 +3,20 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
   return vertexMainImpl(vertexIndex);
 }
 
-@fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
-  return fragmentMainImpl(input);
+@compute @workgroup_size(8, 8, 1)
+fn tileBucketPrepassComputeMain(@builtin(global_invocation_id) globalInvocationId: vec3<u32>) {
+  let tile_res = tile_resolution();
+
+  if (globalInvocationId.x >= tile_res.x || globalInvocationId.y >= tile_res.y) {
+    return;
+  }
+
+  tile_bucket_prepass(globalInvocationId.xy);
 }
 
-fn fragmentMainImpl(input: VertexOutput) -> vec4<f32> {
-  let safe_canvas = max(demoUniforms.canvasResolution, vec2f(1.0, 1.0));
-  let pixel_pos = vec2f(input.uv.x * safe_canvas.x, input.uv.y * safe_canvas.y);
+@fragment
+fn finalRasterFragmentMain(input: VertexOutput) -> @location(0) vec4<f32> {
+  let pixel_pos = input.position.xy;
 
-  return render_active_shape(pixel_pos);
+  return rasterize_tiled_scene(pixel_pos);
 }
