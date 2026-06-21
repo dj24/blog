@@ -6,11 +6,14 @@ import { fileURLToPath } from "node:url";
 import { decompressDotLottieToJson, parseLottieJson } from "./dotlottie";
 import {
   encodeGpuCubicBezierSegments,
+  encodeGpuGradientStops,
   encodeGpuShapeRecords,
   gpuCubicBezierSegmentStrideInBytes,
+  gpuGradientStopStrideInBytes,
   gpuPathTerminalFlags,
   gpuShapeRecordStrideInBytes,
   gpuShapeKinds,
+  gpuShapeStyleFlags,
 } from "./gpu-shape-record";
 import { createLottieGpuFrame } from "./lottie-gpu-frame";
 import type { LottieComposition } from "./types/lottie-composition";
@@ -266,6 +269,205 @@ const createStrokedPathAnimation = (): LottieComposition => {
               {
                 ty: "tr",
                 p: { a: 0, k: [80, 100] },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const createGradientFillAnimation = (): LottieComposition => {
+  return {
+    v: "5.7.5",
+    fr: 60,
+    ip: 0,
+    op: 10,
+    w: 200,
+    h: 200,
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        ip: 0,
+        op: 10,
+        ks: {
+          o: { a: 0, k: 100 },
+        },
+        shapes: [
+          {
+            ty: "gr",
+            it: [
+              {
+                ty: "rc",
+                s: { a: 0, k: [80, 50] },
+                p: { a: 0, k: [0, 0] },
+                r: { a: 0, k: 8 },
+              },
+              {
+                ty: "gf",
+                o: { a: 0, k: 75 },
+                r: 1,
+                g: {
+                  p: 2,
+                  k: {
+                    a: 0,
+                    k: [0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 0.4],
+                  },
+                },
+                s: { a: 0, k: [-40, 0] },
+                e: { a: 0, k: [40, 0] },
+                t: 1,
+              },
+              {
+                ty: "tr",
+                p: { a: 0, k: [100, 100] },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const createGradientStrokeAnimation = (): LottieComposition => {
+  return {
+    v: "5.7.5",
+    fr: 60,
+    ip: 0,
+    op: 10,
+    w: 200,
+    h: 200,
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        ip: 0,
+        op: 10,
+        ks: {
+          o: { a: 0, k: 100 },
+        },
+        shapes: [
+          {
+            ty: "gr",
+            it: [
+              {
+                ty: "sh",
+                ks: {
+                  a: 0,
+                  k: {
+                    c: false,
+                    v: [
+                      [-30, 0],
+                      [30, 0],
+                    ],
+                    i: [
+                      [0, 0],
+                      [0, 0],
+                    ],
+                    o: [
+                      [0, 0],
+                      [0, 0],
+                    ],
+                  },
+                },
+              },
+              {
+                ty: "gs",
+                o: { a: 0, k: 90 },
+                w: { a: 0, k: 10 },
+                g: {
+                  p: 2,
+                  k: {
+                    a: 0,
+                    k: [0, 1, 0.5, 0, 1, 0, 0.25, 1],
+                  },
+                },
+                s: { a: 0, k: [-30, 0] },
+                e: { a: 0, k: [30, 0] },
+                t: 1,
+                lc: 2,
+                lj: 2,
+              },
+              {
+                ty: "tr",
+                p: { a: 0, k: [100, 80] },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const createAnimatedGradientFillAnimation = (): LottieComposition => {
+  return {
+    v: "5.7.5",
+    fr: 60,
+    ip: 0,
+    op: 20,
+    w: 200,
+    h: 200,
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        ip: 0,
+        op: 20,
+        ks: {
+          o: { a: 0, k: 100 },
+        },
+        shapes: [
+          {
+            ty: "gr",
+            it: [
+              {
+                ty: "rc",
+                s: { a: 0, k: [60, 60] },
+                p: { a: 0, k: [0, 0] },
+                r: { a: 0, k: 0 },
+              },
+              {
+                ty: "gf",
+                o: { a: 0, k: 100 },
+                g: {
+                  p: 2,
+                  k: {
+                    a: 1,
+                    k: [
+                      { t: 0, s: [0, 1, 0, 0, 1, 0, 0, 1] },
+                      { t: 10, s: [0, 0, 1, 0, 1, 1, 1, 0] },
+                    ],
+                  },
+                },
+                s: {
+                  a: 1,
+                  k: [
+                    { t: 0, s: [-20, 0] },
+                    { t: 10, s: [20, 0] },
+                  ],
+                },
+                e: {
+                  a: 1,
+                  k: [
+                    { t: 0, s: [20, 0] },
+                    { t: 10, s: [40, 0] },
+                  ],
+                },
+                t: 1,
+              },
+              {
+                ty: "tr",
+                p: { a: 0, k: [100, 100] },
                 o: { a: 0, k: 100 },
               },
             ],
@@ -554,6 +756,70 @@ describe("Lottie GPU frame conversion", () => {
     assert.equal(pathRecord.strokeLineJoin, 2);
   });
 
+  test("encodes gradient fill indirection and merged opacity stops", () => {
+    const frame = createLottieGpuFrame(createGradientFillAnimation(), 0);
+    const rectangle = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.rectangle);
+
+    assert.ok(rectangle);
+    assert.equal(rectangle.flags & gpuShapeStyleFlags.fillGradient, gpuShapeStyleFlags.fillGradient);
+    assert.equal(rectangle.reserved0, 0);
+    assert.equal(rectangle.polygonMode, 2);
+    assertApproximatelyEqual(rectangle.centerX, -40);
+    assertApproximatelyEqual(rectangle.centerY, 0);
+    assertApproximatelyEqual(rectangle.starInnerRoundness, 40);
+    assertApproximatelyEqual(rectangle.starOuterRoundness, 0);
+    assert.equal(frame.gradientStops.length, 2);
+    assertApproximatelyEqual(frame.gradientStops[0]?.offset ?? 0, 0);
+    assertApproximatelyEqual(frame.gradientStops[0]?.red ?? 0, 1);
+    assertApproximatelyEqual(frame.gradientStops[0]?.alpha ?? 0, 1);
+    assertApproximatelyEqual(frame.gradientStops[1]?.offset ?? 0, 1);
+    assertApproximatelyEqual(frame.gradientStops[1]?.blue ?? 0, 1);
+    assertApproximatelyEqual(frame.gradientStops[1]?.alpha ?? 0, 0.4);
+  });
+
+  test("encodes gradient stroke metadata on emitted path records", () => {
+    const frame = createLottieGpuFrame(createGradientStrokeAnimation(), 0);
+    const pathRecord = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.path);
+
+    assert.ok(pathRecord);
+    assert.equal(
+      pathRecord.flags & gpuShapeStyleFlags.strokeGradient,
+      gpuShapeStyleFlags.strokeGradient,
+    );
+    assert.equal(pathRecord.trimMode, 0);
+    assert.equal(pathRecord.mergeMode, 2);
+    assertApproximatelyEqual(pathRecord.twistAmount, -30);
+    assertApproximatelyEqual(pathRecord.twistCenterX, 0);
+    assertApproximatelyEqual(pathRecord.twistCenterY, 30);
+    assertApproximatelyEqual(pathRecord.puckerBloatAmount, 0);
+    assert.equal(frame.gradientStops.length, 2);
+    assertApproximatelyEqual(frame.gradientStops[0]?.red ?? 0, 1);
+    assertApproximatelyEqual(frame.gradientStops[1]?.blue ?? 0, 1);
+  });
+
+  test("interpolates animated gradient stops and endpoints across frames", () => {
+    const startFrame = createLottieGpuFrame(createAnimatedGradientFillAnimation(), 0);
+    const midFrame = createLottieGpuFrame(createAnimatedGradientFillAnimation(), 5);
+    const endFrame = createLottieGpuFrame(createAnimatedGradientFillAnimation(), 10);
+    const startRecord = startFrame.shapeRecords[0];
+    const midRecord = midFrame.shapeRecords[0];
+    const endRecord = endFrame.shapeRecords[0];
+
+    assert.ok(startRecord);
+    assert.ok(midRecord);
+    assert.ok(endRecord);
+    assertApproximatelyEqual(startRecord.centerX, -20);
+    assertApproximatelyEqual(midRecord.centerX, 0);
+    assertApproximatelyEqual(endRecord.centerX, 20);
+    assertApproximatelyEqual(startRecord.starInnerRoundness, 20);
+    assertApproximatelyEqual(midRecord.starInnerRoundness, 30);
+    assertApproximatelyEqual(endRecord.starInnerRoundness, 40);
+    assertApproximatelyEqual(startFrame.gradientStops[0]?.red ?? 0, 1);
+    assert.ok((midFrame.gradientStops[0]?.red ?? 0) < 1);
+    assert.ok((midFrame.gradientStops[0]?.green ?? 0) < 1);
+    assertApproximatelyEqual(endFrame.gradientStops[0]?.green ?? 0, 1);
+  });
+
   test("encodes path segment shapes and cubic segments with the expected layout", () => {
     const frame = createLottieGpuFrame(createStaticPathAnimation(true), 0);
     const encodedShapeRecords = encodeGpuShapeRecords(frame.shapeRecords);
@@ -592,6 +858,23 @@ describe("Lottie GPU frame conversion", () => {
     assertApproximatelyEqual(shapeView.getFloat32(112, true), 0.6);
     assertApproximatelyEqual(shapeView.getFloat32(116, true), 12);
     assertApproximatelyEqual(shapeView.getFloat32(120, true), 7);
+  });
+
+  test("encodes gradient stop payload into the dedicated side buffer", () => {
+    const frame = createLottieGpuFrame(createGradientFillAnimation(), 0);
+    const encodedStops = encodeGpuGradientStops(frame.gradientStops);
+    const stopView = new DataView(encodedStops.arrayBuffer);
+
+    assert.equal(encodedStops.recordCount, 2);
+    assert.equal(encodedStops.strideInBytes, gpuGradientStopStrideInBytes);
+    assertApproximatelyEqual(stopView.getFloat32(0, true), 0);
+    assertApproximatelyEqual(stopView.getFloat32(4, true), 1);
+    assertApproximatelyEqual(stopView.getFloat32(16, true), 1);
+    assertApproximatelyEqual(stopView.getFloat32(gpuGradientStopStrideInBytes, true), 1);
+    assertApproximatelyEqual(
+      stopView.getFloat32(gpuGradientStopStrideInBytes + 16, true),
+      0.4,
+    );
   });
 
   test("preserves authored cubic endpoints and handles after centering and y-flip", () => {

@@ -5,8 +5,10 @@ import invariant from "tiny-invariant";
 import { useEffect, useRef, useState } from "react";
 import {
   encodeGpuCubicBezierSegments,
+  encodeGpuGradientStops,
   encodeGpuShapeRecords,
   gpuCubicBezierSegmentStrideInBytes,
+  gpuGradientStopStrideInBytes,
   gpuShapeRecordStrideInBytes,
 } from "../_lib/gpu-shape-record";
 import { createLottieGpuFrame } from "../_lib/lottie-gpu-frame";
@@ -72,6 +74,7 @@ type WebGpuShapeDemoSetup = {
   canvasFormat: GPUTextureFormat;
   device: GPUDevice;
   maxCubicBezierSegmentCount: number;
+  maxGradientStopCount: number;
   maxShapeCount: number;
   timestampQuerySupported: boolean;
   uniformStride: number;
@@ -81,6 +84,7 @@ type WebGpuShapeFrameData = {
   compositionHeight: number;
   compositionWidth: number;
   encodedCubicBezierSegments: ReturnType<typeof encodeGpuCubicBezierSegments>;
+  encodedGradientStops: ReturnType<typeof encodeGpuGradientStops>;
   encodedShapeRecords: ReturnType<typeof encodeGpuShapeRecords>;
   shapeCount: number;
 };
@@ -293,6 +297,7 @@ const getShapeFrameData = (animation: LottieComposition, frame: number): WebGpuS
     encodedCubicBezierSegments: encodeGpuCubicBezierSegments(
       lottieFrame.cubicBezierSegments,
     ),
+    encodedGradientStops: encodeGpuGradientStops(lottieFrame.gradientStops),
     encodedShapeRecords: encodeGpuShapeRecords(lottieFrame.shapeRecords),
     shapeCount: lottieFrame.shapeRecords.length,
   };
@@ -304,6 +309,7 @@ const getMaxFramePayloadCounts = (animation: LottieComposition) => {
 
   let maxShapeCount = 0;
   let maxCubicBezierSegmentCount = 0;
+  let maxGradientStopCount = 0;
 
   for (let frame = startFrame; frame <= endFrame; frame += 1) {
     const lottieFrame = createLottieGpuFrame(animation, frame);
@@ -313,10 +319,12 @@ const getMaxFramePayloadCounts = (animation: LottieComposition) => {
       maxCubicBezierSegmentCount,
       lottieFrame.cubicBezierSegments.length,
     );
+    maxGradientStopCount = Math.max(maxGradientStopCount, lottieFrame.gradientStops.length);
   }
 
   return {
     maxCubicBezierSegmentCount,
+    maxGradientStopCount,
     maxShapeCount,
   };
 };
@@ -360,6 +368,7 @@ const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
     canvasFormat,
     device,
     maxCubicBezierSegmentCount: framePayloadCounts.maxCubicBezierSegmentCount,
+    maxGradientStopCount: framePayloadCounts.maxGradientStopCount,
     maxShapeCount: framePayloadCounts.maxShapeCount,
     timestampQuerySupported,
     uniformStride,
@@ -407,15 +416,18 @@ export const WebGpuShapeDemoClient = ({
       canvasFormat,
       device,
       maxCubicBezierSegmentCount,
+      maxGradientStopCount,
       maxShapeCount,
       timestampQuerySupported,
       uniformStride,
     } = setup;
     const drawCapacity = Math.max(maxShapeCount, 1);
     const cubicBezierSegmentCapacity = Math.max(maxCubicBezierSegmentCount, 1);
+    const gradientStopCapacity = Math.max(maxGradientStopCount, 1);
     const shapeStorageSize = gpuShapeRecordStrideInBytes * drawCapacity;
     const cubicBezierSegmentStorageSize =
       gpuCubicBezierSegmentStrideInBytes * cubicBezierSegmentCapacity;
+    const gradientStopStorageSize = gpuGradientStopStrideInBytes * gradientStopCapacity;
     const shaderCode = buildShapeDemoShaderSource({
       rasterTargetFormat:
         canvasFormat === "bgra8unorm" ? "bgra8unorm" : "rgba8unorm",
@@ -516,9 +528,8 @@ export const WebGpuShapeDemoClient = ({
         {
           binding: 5,
           visibility: GPUShaderStage.COMPUTE,
-          storageTexture: {
-            access: "write-only",
-            format: canvasFormat,
+          buffer: {
+            type: "read-only-storage",
           },
         },
         {
@@ -526,6 +537,14 @@ export const WebGpuShapeDemoClient = ({
           visibility: GPUShaderStage.COMPUTE,
           buffer: {
             type: "storage",
+          },
+        },
+        {
+          binding: 7,
+          visibility: GPUShaderStage.COMPUTE,
+          storageTexture: {
+            access: "write-only",
+            format: canvasFormat,
           },
         },
       ],
@@ -572,6 +591,10 @@ export const WebGpuShapeDemoClient = ({
       size: cubicBezierSegmentStorageSize,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
     });
+    const gradientStopBuffer = device.createBuffer({
+      size: gradientStopStorageSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
+    });
     const uniformBuffer = device.createBuffer({
       size: uniformStride * (drawCapacity + 1),
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
@@ -596,6 +619,7 @@ export const WebGpuShapeDemoClient = ({
         compositionHeight,
         compositionWidth,
         encodedCubicBezierSegments,
+        encodedGradientStops,
         encodedShapeRecords,
         shapeCount,
       } = getShapeFrameData(animation, frame);
@@ -687,6 +711,10 @@ export const WebGpuShapeDemoClient = ({
           0,
           encodedCubicBezierSegments.arrayBuffer,
         );
+      }
+
+      if (encodedGradientStops.arrayBuffer.byteLength > 0) {
+        device.queue.writeBuffer(gradientStopBuffer, 0, encodedGradientStops.arrayBuffer);
       }
 
       const uniformArrayBuffer = new ArrayBuffer(uniformStride * (drawCapacity + 1));
@@ -815,13 +843,19 @@ export const WebGpuShapeDemoClient = ({
           },
           {
             binding: 5,
-            resource: rasterTargetResources.textureView,
+            resource: {
+              buffer: gradientStopBuffer,
+            },
           },
           {
             binding: 6,
             resource: {
               buffer: tileBucketResources.tileInstructionBuffer,
             },
+          },
+          {
+            binding: 7,
+            resource: rasterTargetResources.textureView,
           },
         ],
       });
@@ -984,6 +1018,7 @@ export const WebGpuShapeDemoClient = ({
       destroyTimestampQueryResources(timestampQueryResources);
       shapeBuffer.destroy();
       cubicBezierSegmentBuffer.destroy();
+      gradientStopBuffer.destroy();
       uniformBuffer.destroy();
 
       if (renderStateRef.current?.context === context) {

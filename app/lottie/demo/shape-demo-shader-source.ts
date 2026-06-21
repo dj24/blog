@@ -1,6 +1,7 @@
 import invariant from "tiny-invariant";
 import {
   gpuCubicBezierSegmentWgsl,
+  gpuGradientStopWgsl,
   gpuShapeRecordWgsl,
 } from "../_lib/gpu-shape-record";
 import mainSource from "./shaders/main.wgsl";
@@ -31,6 +32,7 @@ export const buildShapeDemoShaderSource = ({
 }) => {
   const sdfUtils = getRawShaderSource(sdfUtilsSource, "sdf_utils.wgsl");
   const cubicBezierSegments = gpuCubicBezierSegmentWgsl;
+  const gradientStops = gpuGradientStopWgsl;
   const shapeRender = getRawShaderSource(shapeRenderSource, "shape_render.wgsl");
   const main = getRawShaderSource(mainSource, "main.wgsl").replaceAll(
     "__RASTER_TARGET_FORMAT__",
@@ -43,6 +45,8 @@ ${sdfUtils}
 ${gpuShapeRecordWgsl}
 
 ${cubicBezierSegments}
+
+${gradientStops}
 
 ${shapeRender}
 

@@ -31,6 +31,13 @@ export const gpuPathTerminalFlags = {
   end: 1 << 1,
 } as const;
 
+export const gpuShapeStyleFlags = {
+  fillGradient: 1 << 2,
+  strokeGradient: 1 << 3,
+  fillGradientRadial: 1 << 4,
+  strokeGradientRadial: 1 << 5,
+} as const;
+
 export type GpuShapeRecord = {
   id: number;
   kind: number;
@@ -99,6 +106,14 @@ export type GpuCubicBezierSegment = {
   c2Y: number;
   p3X: number;
   p3Y: number;
+};
+
+export type GpuGradientStop = {
+  offset: number;
+  red: number;
+  green: number;
+  blue: number;
+  alpha: number;
 };
 
 export const gpuShapeRecordWgsl = /* wgsl */ `
@@ -192,6 +207,18 @@ struct CubicBezierSegment {
 @group(0) @binding(2) var<storage, read> cubicBezierSegments: array<CubicBezierSegment>;
 `;
 
+export const gpuGradientStopWgsl = /* wgsl */ `
+struct GradientStop {
+  offset: f32,
+  red: f32,
+  green: f32,
+  blue: f32,
+  alpha: f32,
+};
+
+@group(0) @binding(5) var<storage, read> gradientStops: array<GradientStop>;
+`;
+
 const definitions = makeShaderDataDefinitions(gpuShapeRecordWgsl);
 const storageDefinition = definitions.storages.shapeRecords;
 const unsizedArrayElement = getSizeAndAlignmentOfUnsizedArrayElement(storageDefinition);
@@ -200,9 +227,15 @@ const cubicBezierStorageDefinition = cubicBezierDefinitions.storages.cubicBezier
 const cubicBezierUnsizedArrayElement = getSizeAndAlignmentOfUnsizedArrayElement(
   cubicBezierStorageDefinition,
 );
+const gradientDefinitions = makeShaderDataDefinitions(gpuGradientStopWgsl);
+const gradientStorageDefinition = gradientDefinitions.storages.gradientStops;
+const gradientUnsizedArrayElement = getSizeAndAlignmentOfUnsizedArrayElement(
+  gradientStorageDefinition,
+);
 
 export const gpuShapeRecordStrideInBytes = unsizedArrayElement.size;
 export const gpuCubicBezierSegmentStrideInBytes = cubicBezierUnsizedArrayElement.size;
+export const gpuGradientStopStrideInBytes = gradientUnsizedArrayElement.size;
 
 export type EncodedGpuShapeRecordBuffer = {
   arrayBuffer: ArrayBuffer;
@@ -212,6 +245,13 @@ export type EncodedGpuShapeRecordBuffer = {
 };
 
 export type EncodedGpuCubicBezierSegmentBuffer = {
+  arrayBuffer: ArrayBuffer;
+  recordCount: number;
+  strideInBytes: number;
+  structuredView: StructuredView;
+};
+
+export type EncodedGpuGradientStopBuffer = {
   arrayBuffer: ArrayBuffer;
   recordCount: number;
   strideInBytes: number;
@@ -294,6 +334,17 @@ const gpuCubicBezierSegmentFieldLayout = [
   type: "f32";
 }[];
 
+const gpuGradientStopFieldLayout = [
+  { field: "offset", type: "f32" },
+  { field: "red", type: "f32" },
+  { field: "green", type: "f32" },
+  { field: "blue", type: "f32" },
+  { field: "alpha", type: "f32" },
+] as const satisfies readonly {
+  field: keyof GpuGradientStop;
+  type: "f32";
+}[];
+
 export const createEmptyGpuShapeRecord = (): GpuShapeRecord => {
   return {
     id: 0,
@@ -343,7 +394,7 @@ export const createEmptyGpuShapeRecord = (): GpuShapeRecord => {
     trimStart: 0,
     trimEnd: 1,
     trimOffset: 0,
-    trimMode: 1,
+    trimMode: 0,
     mergeMode: 0,
     repeaterCopies: 0,
     repeaterOffset: 0,
@@ -368,6 +419,16 @@ export const createEmptyGpuCubicBezierSegment = (): GpuCubicBezierSegment => {
   };
 };
 
+export const createEmptyGpuGradientStop = (): GpuGradientStop => {
+  return {
+    offset: 0,
+    red: 0,
+    green: 0,
+    blue: 0,
+    alpha: 1,
+  };
+};
+
 export const createGpuShapeRecordStructuredView = (
   recordCount: number,
   arrayBuffer = new ArrayBuffer(recordCount * gpuShapeRecordStrideInBytes),
@@ -380,6 +441,13 @@ export const createGpuCubicBezierSegmentStructuredView = (
   arrayBuffer = new ArrayBuffer(recordCount * gpuCubicBezierSegmentStrideInBytes),
 ): StructuredView => {
   return makeStructuredView(cubicBezierStorageDefinition, arrayBuffer);
+};
+
+export const createGpuGradientStopStructuredView = (
+  recordCount: number,
+  arrayBuffer = new ArrayBuffer(recordCount * gpuGradientStopStrideInBytes),
+): StructuredView => {
+  return makeStructuredView(gradientStorageDefinition, arrayBuffer);
 };
 
 export const encodeGpuShapeRecords = (
@@ -435,6 +503,31 @@ export const encodeGpuCubicBezierSegments = (
     arrayBuffer,
     recordCount: records.length,
     strideInBytes: gpuCubicBezierSegmentStrideInBytes,
+    structuredView,
+  };
+};
+
+export const encodeGpuGradientStops = (
+  records: readonly GpuGradientStop[],
+): EncodedGpuGradientStopBuffer => {
+  const arrayBuffer = new ArrayBuffer(records.length * gpuGradientStopStrideInBytes);
+  const view = new DataView(arrayBuffer);
+
+  records.forEach((record, recordIndex) => {
+    let byteOffset = recordIndex * gpuGradientStopStrideInBytes;
+
+    gpuGradientStopFieldLayout.forEach(({ field }) => {
+      view.setFloat32(byteOffset, record[field], true);
+      byteOffset += 4;
+    });
+  });
+
+  const structuredView = createGpuGradientStopStructuredView(records.length, arrayBuffer);
+
+  return {
+    arrayBuffer,
+    recordCount: records.length,
+    strideInBytes: gpuGradientStopStrideInBytes,
     structuredView,
   };
 };

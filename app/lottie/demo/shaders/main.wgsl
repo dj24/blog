@@ -26,7 +26,7 @@ fn tileInstructionCompactionComputeMain(@builtin(global_invocation_id) globalInv
   compact_tile_instruction(globalInvocationId.xy);
 }
 
-@group(0) @binding(5) var rasterTarget: texture_storage_2d<__RASTER_TARGET_FORMAT__, write>;
+@group(0) @binding(7) var rasterTarget: texture_storage_2d<__RASTER_TARGET_FORMAT__, write>;
 
 @compute @workgroup_size(8, 8, 1)
 fn clearRasterTargetComputeMain(@builtin(global_invocation_id) globalInvocationId: vec3<u32>) {

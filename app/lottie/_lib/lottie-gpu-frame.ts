@@ -1,10 +1,13 @@
 import { match } from "ts-pattern";
 import {
   createEmptyGpuCubicBezierSegment,
+  createEmptyGpuGradientStop,
   createEmptyGpuShapeRecord,
   gpuPathTerminalFlags,
   gpuShapeKinds,
+  gpuShapeStyleFlags,
   type GpuCubicBezierSegment,
+  type GpuGradientStop,
   type GpuShapeRecord,
 } from "./gpu-shape-record";
 import type { LottieComposition } from "./types/lottie-composition";
@@ -24,6 +27,7 @@ import type {
   LottieEllipseShape,
   LottieFillShape,
   LottieGradientFillShape,
+  LottieGradientStrokeShape,
   LottiePathShape,
   LottieRectangleShape,
   LottieShapeGroup,
@@ -38,7 +42,23 @@ type Paint = {
   opacity: number;
 };
 
-type Stroke = Paint & {
+type SolidPaint = Paint & {
+  kind: "solid";
+};
+
+type GradientPaint = {
+  kind: "gradient";
+  end: LottieVector2;
+  gradientIndex: number;
+  gradientKind: number;
+  gradientStopCount: number;
+  opacity: number;
+  start: LottieVector2;
+};
+
+type PaintStyle = GradientPaint | SolidPaint;
+
+type Stroke = PaintStyle & {
   width: number;
   lineCap: number;
   lineJoin: number;
@@ -47,7 +67,7 @@ type Stroke = Paint & {
 };
 
 type ShapeStyle = {
-  fill: Paint | null;
+  fill: PaintStyle | null;
   stroke: Stroke | null;
 };
 
@@ -66,6 +86,7 @@ export type LottieGpuFrame = {
   compositionHeight: number;
   shapeRecords: GpuShapeRecord[];
   cubicBezierSegments: GpuCubicBezierSegment[];
+  gradientStops: GpuGradientStop[];
 };
 
 type FlattenedGpuShapeBuffers = {
@@ -78,6 +99,11 @@ const defaultPaint: Paint = {
   color: [0, 0, 0],
   opacity: 0,
 };
+const defaultSolidPaint: SolidPaint = {
+  ...defaultPaint,
+  kind: "solid",
+};
+const defaultColorStopAlpha = 1;
 const defaultLineCap = 1;
 const defaultLineJoin = 1;
 const defaultMiterLimit = 4;
@@ -495,15 +521,136 @@ const createContextWithTransform = (
   };
 };
 
-const firstGradientColor = (stops: LottieGradientStopValues): LottieColor => {
-  return [stops[1] ?? 1, stops[2] ?? 1, stops[3] ?? 1];
-};
-
 const emptyFlattenedGpuShapeBuffers = (): FlattenedGpuShapeBuffers => {
   return {
     shapeRecords: [],
     cubicBezierSegments: [],
   };
+};
+
+const clampGradientOffset = (offset: number) => {
+  return clamp(offset, 0, 1);
+};
+
+const dedupeSortedNumbers = (values: readonly number[]) => {
+  return values.reduce<number[]>((accumulator, value) => {
+    const lastValue = accumulator[accumulator.length - 1];
+
+    if (lastValue === undefined || Math.abs(lastValue - value) > cubicBezierEpsilon) {
+      return [...accumulator, value];
+    }
+
+    return accumulator;
+  }, []);
+};
+
+const interpolateChannelAtOffset = (
+  values: readonly { offset: number; value: number }[],
+  offset: number,
+  fallback: number,
+) => {
+  const firstStop = values[0];
+
+  if (!firstStop) {
+    return fallback;
+  }
+
+  if (offset <= firstStop.offset) {
+    return firstStop.value;
+  }
+
+  for (let index = 0; index < values.length - 1; index += 1) {
+    const current = values[index];
+    const next = values[index + 1];
+
+    if (!current || !next) {
+      continue;
+    }
+
+    if (offset <= next.offset) {
+      const range = next.offset - current.offset;
+
+      if (Math.abs(range) <= cubicBezierEpsilon) {
+        return next.value;
+      }
+
+      return interpolateNumber(current.value, next.value, (offset - current.offset) / range);
+    }
+  }
+
+  return values[values.length - 1]?.value ?? fallback;
+};
+
+const interpolateColorAtOffset = (
+  values: readonly { offset: number; color: LottieColor }[],
+  offset: number,
+): LottieColor => {
+  return [
+    interpolateChannelAtOffset(
+      values.map((value) => ({ offset: value.offset, value: value.color[0] })),
+      offset,
+      defaultPaint.color[0],
+    ),
+    interpolateChannelAtOffset(
+      values.map((value) => ({ offset: value.offset, value: value.color[1] })),
+      offset,
+      defaultPaint.color[1],
+    ),
+    interpolateChannelAtOffset(
+      values.map((value) => ({ offset: value.offset, value: value.color[2] })),
+      offset,
+      defaultPaint.color[2],
+    ),
+  ];
+};
+
+const createGpuGradientStops = ({
+  stopCount,
+  values,
+}: {
+  stopCount: number;
+  values: LottieGradientStopValues;
+}): GpuGradientStop[] => {
+  const safeStopCount = Math.max(1, Math.floor(stopCount));
+  const colorStops = Array.from({ length: safeStopCount }, (_, index) => {
+    return {
+      color: [
+        values[index * 4 + 1] ?? defaultPaint.color[0],
+        values[index * 4 + 2] ?? defaultPaint.color[1],
+        values[index * 4 + 3] ?? defaultPaint.color[2],
+      ] as LottieColor,
+      offset: clampGradientOffset(values[index * 4] ?? index / Math.max(1, safeStopCount - 1)),
+    };
+  }).sort((left, right) => left.offset - right.offset);
+  const alphaValues = values.slice(safeStopCount * 4);
+  const alphaStops = Array.from({ length: Math.floor(alphaValues.length / 2) }, (_, index) => {
+    return {
+      offset: clampGradientOffset(alphaValues[index * 2] ?? 0),
+      value: clamp(alphaValues[index * 2 + 1] ?? defaultColorStopAlpha, 0, 1),
+    };
+  }).sort((left, right) => left.offset - right.offset);
+  const mergedOffsets = dedupeSortedNumbers(
+    [
+      ...colorStops.map((stop) => stop.offset),
+      ...(alphaStops.length > 0 ? alphaStops.map((stop) => stop.offset) : []),
+    ].sort((left, right) => left - right),
+  );
+
+  return mergedOffsets.map((offset) => {
+    const color = interpolateColorAtOffset(colorStops, offset);
+    const stop = createEmptyGpuGradientStop();
+
+    stop.offset = offset;
+    stop.red = color[0];
+    stop.green = color[1];
+    stop.blue = color[2];
+    stop.alpha =
+      alphaStops.length > 0
+        ? interpolateChannelAtOffset(alphaStops, offset, defaultColorStopAlpha)
+        : defaultColorStopAlpha;
+
+    return stop;
+  });
 };
 
 const mergeFlattenedGpuShapeBuffers = (
@@ -520,32 +667,94 @@ const mergeFlattenedGpuShapeBuffers = (
   }, emptyFlattenedGpuShapeBuffers());
 };
 
-const fillFromItem = (item: LottieFillShape | LottieGradientFillShape, frame: number): Paint => {
+const fillFromItem = ({
+  allocateGradientOffset,
+  frame,
+  item,
+  pushGradientStops,
+}: {
+  allocateGradientOffset: (stopCount: number) => number;
+  frame: number;
+  item: LottieFillShape | LottieGradientFillShape;
+  pushGradientStops: (stops: readonly GpuGradientStop[]) => void;
+}): PaintStyle => {
   return match(item)
     .with({ ty: "fl" }, (fill) => {
       return {
+        kind: "solid" as const,
         color: evaluateProperty(fill.c, frame) ?? defaultPaint.color,
         opacity: numberFrom(fill.o, frame, 100) / 100,
       };
     })
     .with({ ty: "gf" }, (fill) => {
+      const gradientStops = createGpuGradientStops({
+        stopCount: fill.g.p,
+        values: evaluateProperty(fill.g.k, frame) ?? [],
+      });
+      const gradientIndex = allocateGradientOffset(gradientStops.length);
+
+      pushGradientStops(gradientStops);
+
       return {
-        color: firstGradientColor(evaluateProperty(fill.g.k, frame) ?? []),
+        end: vector2PropertyFrom(fill.e, frame, [0, 0]),
+        gradientIndex,
+        gradientKind: fill.t ?? 1,
+        gradientStopCount: gradientStops.length,
+        kind: "gradient" as const,
         opacity: numberFrom(fill.o, frame, 100) / 100,
+        start: vector2PropertyFrom(fill.s, frame, [0, 0]),
       };
     })
     .exhaustive();
 };
 
-const strokeFromItem = (item: LottieStrokeShape, frame: number): Stroke => {
+const strokeFromItem = ({
+  allocateGradientOffset,
+  frame,
+  item,
+  pushGradientStops,
+}: {
+  allocateGradientOffset: (stopCount: number) => number;
+  frame: number;
+  item: LottieGradientStrokeShape | LottieStrokeShape;
+  pushGradientStops: (stops: readonly GpuGradientStop[]) => void;
+}): Stroke => {
+  const stroke = match(item)
+    .with({ ty: "st" }, (solidStroke) => {
+      return {
+        kind: "solid" as const,
+        color: evaluateProperty(solidStroke.c, frame) ?? defaultPaint.color,
+        opacity: numberFrom(solidStroke.o, frame, 100) / 100,
+      };
+    })
+    .with({ ty: "gs" }, (gradientStroke) => {
+      const gradientStops = createGpuGradientStops({
+        stopCount: gradientStroke.g.p,
+        values: evaluateProperty(gradientStroke.g.k, frame) ?? [],
+      });
+      const gradientIndex = allocateGradientOffset(gradientStops.length);
+
+      pushGradientStops(gradientStops);
+
+      return {
+        end: vector2PropertyFrom(gradientStroke.e, frame, [0, 0]),
+        gradientIndex,
+        gradientKind: gradientStroke.t ?? 1,
+        gradientStopCount: gradientStops.length,
+        kind: "gradient" as const,
+        opacity: numberFrom(gradientStroke.o, frame, 100) / 100,
+        start: vector2PropertyFrom(gradientStroke.s, frame, [0, 0]),
+      };
+    })
+    .exhaustive();
+
   return {
-    color: evaluateProperty(item.c, frame) ?? defaultPaint.color,
-    opacity: numberFrom(item.o, frame, 100) / 100,
-    width: numberFrom(item.w, frame, 0),
+    ...stroke,
+    blendMode: item.bm ?? defaultBlendMode,
     lineCap: item.lc ?? defaultLineCap,
     lineJoin: item.lj ?? defaultLineJoin,
     miterLimit: item.ml ?? defaultMiterLimit,
-    blendMode: item.bm ?? defaultBlendMode,
+    width: numberFrom(item.w, frame, 0),
   };
 };
 
@@ -623,7 +832,19 @@ const groupTransform = (group: LottieShapeGroup) => {
   });
 };
 
-const groupStyle = (group: LottieShapeGroup, frame: number, inheritedStyle: ShapeStyle) => {
+const groupStyle = ({
+  allocateGradientOffset,
+  frame,
+  group,
+  inheritedStyle,
+  pushGradientStops,
+}: {
+  allocateGradientOffset: (stopCount: number) => number;
+  frame: number;
+  group: LottieShapeGroup;
+  inheritedStyle: ShapeStyle;
+  pushGradientStops: (stops: readonly GpuGradientStop[]) => void;
+}) => {
   return group.it.reduce<ShapeStyle>((style, item) => {
     if (!hasShapeType(item)) {
       return style;
@@ -634,16 +855,21 @@ const groupStyle = (group: LottieShapeGroup, frame: number, inheritedStyle: Shap
 
       return {
         ...style,
-        fill: fillFromItem(fillItem, frame),
+        fill: fillFromItem({ allocateGradientOffset, frame, item: fillItem, pushGradientStops }),
       };
     }
 
-    if (item.ty === "st") {
-      const strokeItem = item as LottieStrokeShape;
+    if (item.ty === "st" || item.ty === "gs") {
+      const strokeItem = item as LottieGradientStrokeShape | LottieStrokeShape;
 
       return {
         ...style,
-        stroke: strokeFromItem(strokeItem, frame),
+        stroke: strokeFromItem({
+          allocateGradientOffset,
+          frame,
+          item: strokeItem,
+          pushGradientStops,
+        }),
       };
     }
 
@@ -662,7 +888,7 @@ const createBaseRecord = ({
 }) => {
   const record = createEmptyGpuShapeRecord();
   const transformedPosition = applyMatrix(context.matrix, position);
-  const fill = context.style.fill ?? defaultPaint;
+  const fill = context.style.fill ?? defaultSolidPaint;
   const stroke = context.style.stroke;
 
   record.id = id;
@@ -672,19 +898,41 @@ const createBaseRecord = ({
   record.scaleY = matrixScaleY(context.matrix);
   record.rotation = matrixRotation(context.matrix);
   record.opacity = context.opacity;
-  record.fillRed = fill.color[0];
-  record.fillGreen = fill.color[1];
-  record.fillBlue = fill.color[2];
+  record.fillRed = fill.kind === "solid" ? fill.color[0] : 0;
+  record.fillGreen = fill.kind === "solid" ? fill.color[1] : 0;
+  record.fillBlue = fill.kind === "solid" ? fill.color[2] : 0;
   record.fillAlpha = fill.opacity;
-  record.strokeRed = stroke?.color[0] ?? 0;
-  record.strokeGreen = stroke?.color[1] ?? 0;
-  record.strokeBlue = stroke?.color[2] ?? 0;
+  record.strokeRed = stroke?.kind === "solid" ? stroke.color[0] : 0;
+  record.strokeGreen = stroke?.kind === "solid" ? stroke.color[1] : 0;
+  record.strokeBlue = stroke?.kind === "solid" ? stroke.color[2] : 0;
   record.strokeAlpha = stroke?.opacity ?? 0;
   record.strokeWidth = stroke?.width ?? 0;
   record.strokeMiterLimit = stroke?.miterLimit ?? defaultMiterLimit;
   record.strokeLineCap = stroke?.lineCap ?? defaultLineCap;
   record.strokeLineJoin = stroke?.lineJoin ?? defaultLineJoin;
   record.strokeBlendMode = stroke?.blendMode ?? defaultBlendMode;
+
+  if (fill.kind === "gradient") {
+    record.flags |= gpuShapeStyleFlags.fillGradient;
+    record.flags |= fill.gradientKind === 2 ? gpuShapeStyleFlags.fillGradientRadial : 0;
+    record.reserved0 = fill.gradientIndex;
+    record.polygonMode = fill.gradientStopCount;
+    record.centerX = fill.start[0];
+    record.centerY = -fill.start[1];
+    record.starInnerRoundness = fill.end[0];
+    record.starOuterRoundness = -fill.end[1];
+  }
+
+  if (stroke?.kind === "gradient") {
+    record.flags |= gpuShapeStyleFlags.strokeGradient;
+    record.flags |= stroke.gradientKind === 2 ? gpuShapeStyleFlags.strokeGradientRadial : 0;
+    record.trimMode = stroke.gradientIndex;
+    record.mergeMode = stroke.gradientStopCount;
+    record.twistAmount = stroke.start[0];
+    record.twistCenterX = -stroke.start[1];
+    record.twistCenterY = stroke.end[0];
+    record.puckerBloatAmount = -stroke.end[1];
+  }
 
   return record;
 };
@@ -792,7 +1040,7 @@ const pathRecordFromShape = (
       });
 
       record.kind = gpuShapeKinds.path;
-      record.flags =
+      record.flags |=
         (isOpenPath && segmentInstance.segmentIndex === segmentOffset ? gpuPathTerminalFlags.start : 0) |
         (isOpenPath && segmentInstance.segmentIndex === segmentOffset + segments.length - 1
           ? gpuPathTerminalFlags.end
@@ -835,6 +1083,8 @@ const shapeRecordsFromItem = (
   frame: number,
   nextId: () => number,
   allocateSegmentOffset: (segmentCount: number) => number,
+  allocateGradientOffset: (stopCount: number) => number,
+  pushGradientStops: (stops: readonly GpuGradientStop[]) => void,
 ): FlattenedGpuShapeBuffers => {
   if (!hasShapeType(item)) {
     return emptyFlattenedGpuShapeBuffers();
@@ -843,7 +1093,16 @@ const shapeRecordsFromItem = (
   if (item.ty === "gr") {
     const group = item as LottieShapeGroup;
     const groupContext = createContextWithTransform(
-      { ...context, style: groupStyle(group, frame, context.style) },
+      {
+        ...context,
+        style: groupStyle({
+          allocateGradientOffset,
+          frame,
+          group,
+          inheritedStyle: context.style,
+          pushGradientStops,
+        }),
+      },
       groupTransform(group),
       frame,
     );
@@ -851,12 +1110,26 @@ const shapeRecordsFromItem = (
     return mergeFlattenedGpuShapeBuffers(
       group.it.map((child) => {
         if (hasShapeType(child)) {
-          if (child.ty === "tr" || child.ty === "fl" || child.ty === "gf" || child.ty === "st") {
+          if (
+            child.ty === "tr" ||
+            child.ty === "fl" ||
+            child.ty === "gf" ||
+            child.ty === "st" ||
+            child.ty === "gs"
+          ) {
             return emptyFlattenedGpuShapeBuffers();
           }
         }
 
-        return shapeRecordsFromItem(child, groupContext, frame, nextId, allocateSegmentOffset);
+        return shapeRecordsFromItem(
+          child,
+          groupContext,
+          frame,
+          nextId,
+          allocateSegmentOffset,
+          allocateGradientOffset,
+          pushGradientStops,
+        );
       }),
     );
   }
@@ -920,6 +1193,7 @@ export const createLottieGpuFrame = (
 ): LottieGpuFrame => {
   let id = 0;
   let cubicBezierSegmentIndex = 0;
+  const gradientStops: GpuGradientStop[] = [];
   const nextId = () => {
     const currentId = id;
 
@@ -934,6 +1208,14 @@ export const createLottieGpuFrame = (
 
     return currentSegmentOffset;
   };
+  const allocateGradientOffset = (stopCount: number) => {
+    void stopCount;
+
+    return gradientStops.length;
+  };
+  const pushGradientStops = (stops: readonly GpuGradientStop[]) => {
+    gradientStops.push(...stops);
+  };
 
   const flattened = mergeFlattenedGpuShapeBuffers(
     composition.layers
@@ -944,7 +1226,15 @@ export const createLottieGpuFrame = (
 
         return mergeFlattenedGpuShapeBuffers(
           layer.shapes.map((shape) =>
-            shapeRecordsFromItem(shape, context, frame, nextId, allocateSegmentOffset),
+            shapeRecordsFromItem(
+              shape,
+              context,
+              frame,
+              nextId,
+              allocateSegmentOffset,
+              allocateGradientOffset,
+              pushGradientStops,
+            ),
           ),
         );
       }),
@@ -955,5 +1245,6 @@ export const createLottieGpuFrame = (
     compositionHeight: composition.h,
     shapeRecords: flattened.shapeRecords,
     cubicBezierSegments: flattened.cubicBezierSegments,
+    gradientStops,
   };
 };

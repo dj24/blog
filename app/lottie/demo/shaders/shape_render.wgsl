@@ -3,6 +3,10 @@ const SHAPE_KIND_ELLIPSE: u32 = 2u;
 const SHAPE_KIND_PATH: u32 = 4u;
 const PATH_TERMINAL_START: u32 = 1u;
 const PATH_TERMINAL_END: u32 = 2u;
+const SHAPE_FLAG_FILL_GRADIENT: u32 = 1u << 2u;
+const SHAPE_FLAG_STROKE_GRADIENT: u32 = 1u << 3u;
+const SHAPE_FLAG_FILL_GRADIENT_RADIAL: u32 = 1u << 4u;
+const SHAPE_FLAG_STROKE_GRADIENT_RADIAL: u32 = 1u << 5u;
 const STROKE_CAP_BUTT: u32 = 1u;
 const STROKE_CAP_ROUND: u32 = 2u;
 const STROKE_CAP_SQUARE: u32 = 3u;
@@ -175,6 +179,125 @@ fn centered_stroke_fill_inset(shape: ShapeRecord) -> f32 {
 
 fn has_path_terminal_flag(shape: ShapeRecord, terminal_flag: u32) -> bool {
   return (shape.flags & terminal_flag) != 0u;
+}
+
+fn has_shape_style_flag(shape: ShapeRecord, style_flag: u32) -> bool {
+  return (shape.flags & style_flag) != 0u;
+}
+
+fn fill_gradient_start(shape: ShapeRecord) -> vec2f {
+  return vec2f(shape.centerX, shape.centerY);
+}
+
+fn fill_gradient_end(shape: ShapeRecord) -> vec2f {
+  return vec2f(shape.starInnerRoundness, shape.starOuterRoundness);
+}
+
+fn fill_gradient_index(shape: ShapeRecord) -> u32 {
+  return shape.reserved0;
+}
+
+fn fill_gradient_stop_count(shape: ShapeRecord) -> u32 {
+  return shape.polygonMode;
+}
+
+fn stroke_gradient_start(shape: ShapeRecord) -> vec2f {
+  return vec2f(shape.twistAmount, shape.twistCenterX);
+}
+
+fn stroke_gradient_end(shape: ShapeRecord) -> vec2f {
+  return vec2f(shape.twistCenterY, shape.puckerBloatAmount);
+}
+
+fn stroke_gradient_index(shape: ShapeRecord) -> u32 {
+  return shape.trimMode;
+}
+
+fn stroke_gradient_stop_count(shape: ShapeRecord) -> u32 {
+  return shape.mergeMode;
+}
+
+fn linear_gradient_ratio(local_p: vec2f, start: vec2f, end: vec2f) -> f32 {
+  let axis = end - start;
+  let axis_length_squared = dot(axis, axis);
+
+  if (axis_length_squared <= 0.000001) {
+    return 0.0;
+  }
+
+  return clamp(dot(local_p - start, axis) / axis_length_squared, 0.0, 1.0);
+}
+
+fn radial_gradient_ratio(local_p: vec2f, start: vec2f, end: vec2f) -> f32 {
+  let radius = max(length(end - start), 0.0001);
+
+  return clamp(length(local_p - start) / radius, 0.0, 1.0);
+}
+
+fn sample_gradient_stop_range(gradient_index: u32, gradient_stop_count: u32, t: f32) -> vec4f {
+  if (gradient_stop_count == 0u) {
+    return vec4f(0.0);
+  }
+
+  let clamped_t = clamp(t, 0.0, 1.0);
+  let first_stop = gradientStops[gradient_index];
+
+  if (gradient_stop_count == 1u || clamped_t <= first_stop.offset) {
+    return vec4f(first_stop.red, first_stop.green, first_stop.blue, first_stop.alpha);
+  }
+
+  for (var stop_index = 0u; stop_index + 1u < gradient_stop_count; stop_index = stop_index + 1u) {
+    let current_stop = gradientStops[gradient_index + stop_index];
+    let next_stop = gradientStops[gradient_index + stop_index + 1u];
+
+    if (clamped_t <= next_stop.offset) {
+      let range = next_stop.offset - current_stop.offset;
+
+      if (abs(range) <= 0.000001) {
+        return vec4f(next_stop.red, next_stop.green, next_stop.blue, next_stop.alpha);
+      }
+
+      let progress = clamp((clamped_t - current_stop.offset) / range, 0.0, 1.0);
+
+      return mix(
+        vec4f(current_stop.red, current_stop.green, current_stop.blue, current_stop.alpha),
+        vec4f(next_stop.red, next_stop.green, next_stop.blue, next_stop.alpha),
+        progress,
+      );
+    }
+  }
+
+  let last_stop = gradientStops[gradient_index + gradient_stop_count - 1u];
+
+  return vec4f(last_stop.red, last_stop.green, last_stop.blue, last_stop.alpha);
+}
+
+fn sample_fill_gradient(shape: ShapeRecord, local_p: vec2f) -> vec4f {
+  let start = fill_gradient_start(shape);
+  let end = fill_gradient_end(shape);
+  let t = select(
+    linear_gradient_ratio(local_p, start, end),
+    radial_gradient_ratio(local_p, start, end),
+    has_shape_style_flag(shape, SHAPE_FLAG_FILL_GRADIENT_RADIAL),
+  );
+
+  return sample_gradient_stop_range(fill_gradient_index(shape), fill_gradient_stop_count(shape), t);
+}
+
+fn sample_stroke_gradient(shape: ShapeRecord, local_p: vec2f) -> vec4f {
+  let start = stroke_gradient_start(shape);
+  let end = stroke_gradient_end(shape);
+  let t = select(
+    linear_gradient_ratio(local_p, start, end),
+    radial_gradient_ratio(local_p, start, end),
+    has_shape_style_flag(shape, SHAPE_FLAG_STROKE_GRADIENT_RADIAL),
+  );
+
+  return sample_gradient_stop_range(
+    stroke_gradient_index(shape),
+    stroke_gradient_stop_count(shape),
+    t,
+  );
 }
 
 fn safe_normalize_or_fallback(direction: vec2f, fallback: vec2f) -> vec2f {
@@ -463,35 +586,76 @@ fn rasterized_shape_sample(shape: ShapeRecord, pixel_pos: vec2f) -> vec4f {
   let layer_opacity = clamp(shape.opacity, 0.0, 1.0);
 
   if (shape.kind == SHAPE_KIND_PATH) {
-    let alpha = fill_from_sdf(sd, aa_width) * clamp(layer_opacity * shape.strokeAlpha, 0.0, 1.0);
+    let coverage = fill_from_sdf(sd, aa_width);
 
-    if (alpha <= 0.0) {
+    if (coverage <= 0.0) {
       return vec4f(0.0);
     }
+
+    if (has_shape_style_flag(shape, SHAPE_FLAG_STROKE_GRADIENT)) {
+      let gradient_sample = sample_stroke_gradient(shape, local_p);
+      let alpha =
+        coverage * clamp(layer_opacity * shape.strokeAlpha * gradient_sample.a, 0.0, 1.0);
+
+      if (alpha <= 0.0) {
+        return vec4f(0.0);
+      }
+
+      return vec4f(gradient_sample.rgb, alpha);
+    }
+
+    let alpha = coverage * clamp(layer_opacity * shape.strokeAlpha, 0.0, 1.0);
 
     return vec4f(stroke_color(shape), alpha);
   }
 
   let fill_inset = centered_stroke_fill_inset(shape);
-  let fill_alpha = select(
+  let fill_coverage = select(
     0.0,
-    fill_from_sdf(sd + fill_inset, aa_width) * clamp(layer_opacity * shape.fillAlpha, 0.0, 1.0),
+    fill_from_sdf(sd + fill_inset, aa_width),
     has_visible_fill(shape),
   );
-  let stroke_alpha = select(
+  let stroke_coverage = select(
     0.0,
-    fill_from_sdf(abs(sd) - shape.strokeWidth * 0.5, aa_width) *
-      clamp(layer_opacity * shape.strokeAlpha, 0.0, 1.0),
+    fill_from_sdf(abs(sd) - shape.strokeWidth * 0.5, aa_width),
     has_visible_stroke(shape),
   );
   var sample = vec4f(0.0);
 
-  if (fill_alpha > 0.0) {
-    sample = over(sample, vec4f(fill_color(shape), fill_alpha));
+  if (fill_coverage > 0.0) {
+    if (has_shape_style_flag(shape, SHAPE_FLAG_FILL_GRADIENT)) {
+      let gradient_sample = sample_fill_gradient(shape, local_p);
+      let fill_alpha =
+        fill_coverage * clamp(layer_opacity * shape.fillAlpha * gradient_sample.a, 0.0, 1.0);
+
+      if (fill_alpha > 0.0) {
+        sample = over(sample, vec4f(gradient_sample.rgb, fill_alpha));
+      }
+    } else {
+      let fill_alpha = fill_coverage * clamp(layer_opacity * shape.fillAlpha, 0.0, 1.0);
+
+      if (fill_alpha > 0.0) {
+        sample = over(sample, vec4f(fill_color(shape), fill_alpha));
+      }
+    }
   }
 
-  if (stroke_alpha > 0.0) {
-    sample = over(sample, vec4f(stroke_color(shape), stroke_alpha));
+  if (stroke_coverage > 0.0) {
+    if (has_shape_style_flag(shape, SHAPE_FLAG_STROKE_GRADIENT)) {
+      let gradient_sample = sample_stroke_gradient(shape, local_p);
+      let stroke_alpha =
+        stroke_coverage * clamp(layer_opacity * shape.strokeAlpha * gradient_sample.a, 0.0, 1.0);
+
+      if (stroke_alpha > 0.0) {
+        sample = over(sample, vec4f(gradient_sample.rgb, stroke_alpha));
+      }
+    } else {
+      let stroke_alpha = stroke_coverage * clamp(layer_opacity * shape.strokeAlpha, 0.0, 1.0);
+
+      if (stroke_alpha > 0.0) {
+        sample = over(sample, vec4f(stroke_color(shape), stroke_alpha));
+      }
+    }
   }
 
   if (sample.a <= 0.0001) {
