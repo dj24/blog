@@ -1,6 +1,6 @@
 import invariant from "tiny-invariant";
 import {
-  gpuQuadraticBezierSegmentWgsl,
+  gpuCubicBezierSegmentWgsl,
   gpuShapeRecordWgsl,
 } from "../_lib/gpu-shape-record";
 import fullscreenTriangleSource from "./shaders/fullscreen_triangle.wgsl";
@@ -31,7 +31,7 @@ export const buildShapeDemoShaderSource = () => {
     "fullscreen_triangle.wgsl",
   );
   const sdfUtils = getRawShaderSource(sdfUtilsSource, "sdf_utils.wgsl");
-  const quadraticBezierSegments = gpuQuadraticBezierSegmentWgsl;
+  const cubicBezierSegments = gpuCubicBezierSegmentWgsl;
   const shapeRender = getRawShaderSource(shapeRenderSource, "shape_render.wgsl");
   const main = getRawShaderSource(mainSource, "main.wgsl");
 
@@ -42,7 +42,7 @@ ${sdfUtils}
 
 ${gpuShapeRecordWgsl}
 
-${quadraticBezierSegments}
+${cubicBezierSegments}
 
 ${shapeRender}
 

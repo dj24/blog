@@ -1,9 +1,9 @@
 # Bezier Path
 
-Cubic Lottie paths will be split on the CPU into quadratic GPU segments due to their varying length.
+Cubic Lottie paths will be uploaded directly as cubic GPU segments.
 
-Each uploaded quadratic segment becomes its own GPU path shape. `ShapeRecord.pathIndex` points
-directly at one quadratic segment in the side buffer, so the shader evaluates a single segment SDF
+Each uploaded cubic segment becomes its own GPU path shape. `ShapeRecord.pathIndex` points
+directly at one cubic segment in the side buffer, so the shader evaluates a single segment SDF
 per shape rather than iterating a path-local segment range.
 
 
@@ -45,9 +45,9 @@ Sources:
 
 Notes:
 - Lottie path tangents define cubic Bezier segments between vertices.
-- Each authored cubic is split once at `t = 0.5` and uploaded as two quadratic GPU segments.
-- Runtime bounds are computed from the quadratic upload payload.
-- The runtime demo uses the quadratic Bezier distance function below, translated from the GLSL reference.
+- Each authored cubic is uploaded as one cubic GPU segment with its original `p0/c1/c2/p3` control points.
+- Runtime bounds are computed from the cubic upload payload's control-point AABB.
+- The runtime demo uses a cubic Bezier distance function translated from the GLSL reference.
 
 ## GLSL Reference
 

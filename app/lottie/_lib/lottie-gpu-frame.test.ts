@@ -5,9 +5,9 @@ import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { decompressDotLottieToJson, parseLottieJson } from "./dotlottie";
 import {
-  encodeGpuQuadraticBezierSegments,
+  encodeGpuCubicBezierSegments,
   encodeGpuShapeRecords,
-  gpuQuadraticBezierSegmentStrideInBytes,
+  gpuCubicBezierSegmentStrideInBytes,
   gpuShapeRecordStrideInBytes,
   gpuShapeKinds,
 } from "./gpu-shape-record";
@@ -24,10 +24,6 @@ const assertApproximatelyEqual = (actual: number, expected: number) => {
     Math.abs(actual - expected) <= tolerance,
     `Expected ${actual} to be approximately ${expected}.`,
   );
-};
-
-const assertApproximatelyZero = (actual: number) => {
-  assertApproximatelyEqual(actual, 0);
 };
 
 const loadSquareAnimation = async () => {
@@ -268,7 +264,7 @@ describe("Lottie GPU frame conversion", () => {
     assert.equal(frame.compositionWidth, 640);
     assert.equal(frame.compositionHeight, 640);
     assert.equal(frame.shapeRecords.length, 3);
-    assert.equal(frame.quadraticBezierSegments.length, 0);
+    assert.equal(frame.cubicBezierSegments.length, 0);
     assert.ok(frame.shapeRecords.some((record) => record.kind === gpuShapeKinds.ellipse));
     assert.ok(frame.shapeRecords.some((record) => record.kind === gpuShapeKinds.rectangle));
     assert.ok(frame.shapeRecords.every((record) => record.kind !== gpuShapeKinds.path));
@@ -353,81 +349,78 @@ describe("Lottie GPU frame conversion", () => {
     assertApproximatelyEqual(afterLastKeyframe.scaleY, 2);
   });
 
-  test("flattens a closed static path into one shape per quadratic segment", () => {
+  test("flattens a closed static path into one shape per authored cubic segment", () => {
     const frame = createLottieGpuFrame(createStaticPathAnimation(true), 0);
     const pathShapes = frame.shapeRecords.filter((record) => record.kind === gpuShapeKinds.path);
 
-    assert.equal(frame.shapeRecords.length, 6);
-    assert.equal(frame.quadraticBezierSegments.length, 6);
-    assert.equal(pathShapes.length, 6);
+    assert.equal(frame.shapeRecords.length, 3);
+    assert.equal(frame.cubicBezierSegments.length, 3);
+    assert.equal(pathShapes.length, 3);
     assert.deepEqual(
       pathShapes.map((record) => record.pathIndex),
-      [0, 1, 2, 3, 4, 5],
+      [0, 1, 2],
     );
     assert.ok(pathShapes.every((record) => record.width === 10));
-    assertApproximatelyEqual(pathShapes[0]?.positionX ?? 0, 90);
-    assertApproximatelyEqual(pathShapes[0]?.positionY ?? 0, 85);
-    assertApproximatelyEqual(pathShapes[0]?.boundsMinX ?? 0, -10);
-    assertApproximatelyEqual(pathShapes[0]?.boundsMinY ?? 0, -5);
-    assertApproximatelyEqual(pathShapes[0]?.boundsMaxX ?? 0, 10);
-    assertApproximatelyEqual(pathShapes[0]?.boundsMaxY ?? 0, 5);
-    assertApproximatelyEqual(frame.quadraticBezierSegments[0]?.aX ?? 0, -10);
-    assertApproximatelyEqual(frame.quadraticBezierSegments[0]?.aY ?? 0, 5);
-    assertApproximatelyEqual(frame.quadraticBezierSegments[0]?.cX ?? 0, 10);
-    assertApproximatelyEqual(frame.quadraticBezierSegments[0]?.cY ?? 0, -5);
+    assertApproximatelyEqual(pathShapes[0]?.positionX ?? 0, 100);
+    assertApproximatelyEqual(pathShapes[0]?.positionY ?? 0, 80);
+    assertApproximatelyEqual(pathShapes[0]?.boundsMinX ?? 0, -20);
+    assertApproximatelyEqual(pathShapes[0]?.boundsMinY ?? 0, 0);
+    assertApproximatelyEqual(pathShapes[0]?.boundsMaxX ?? 0, 20);
+    assertApproximatelyEqual(pathShapes[0]?.boundsMaxY ?? 0, 0);
+    assertApproximatelyEqual(frame.cubicBezierSegments[0]?.p0X ?? 0, -20);
+    assertApproximatelyEqual(frame.cubicBezierSegments[0]?.p0Y ?? 0, 0);
+    assertApproximatelyEqual(frame.cubicBezierSegments[0]?.c1X ?? 0, -10);
+    assertApproximatelyEqual(frame.cubicBezierSegments[0]?.c2X ?? 0, 10);
+    assertApproximatelyEqual(frame.cubicBezierSegments[0]?.p3X ?? 0, 20);
+    assertApproximatelyEqual(frame.cubicBezierSegments[0]?.p3Y ?? 0, 0);
   });
 
   test("does not append a closing segment for open paths", () => {
     const frame = createLottieGpuFrame(createStaticPathAnimation(false), 0);
 
-    assert.equal(frame.shapeRecords.length, 4);
-    assert.equal(frame.quadraticBezierSegments.length, 4);
-    assert.equal(frame.shapeRecords.filter((record) => record.kind === gpuShapeKinds.path).length, 4);
+    assert.equal(frame.shapeRecords.length, 2);
+    assert.equal(frame.cubicBezierSegments.length, 2);
+    assert.equal(frame.shapeRecords.filter((record) => record.kind === gpuShapeKinds.path).length, 2);
   });
 
-  test("encodes path segment shapes and quadratic segments with the expected layout", () => {
+  test("encodes path segment shapes and cubic segments with the expected layout", () => {
     const frame = createLottieGpuFrame(createStaticPathAnimation(true), 0);
     const encodedShapeRecords = encodeGpuShapeRecords(frame.shapeRecords);
-    const encodedSegments = encodeGpuQuadraticBezierSegments(frame.quadraticBezierSegments);
+    const encodedSegments = encodeGpuCubicBezierSegments(frame.cubicBezierSegments);
     const shapeView = new DataView(encodedShapeRecords.arrayBuffer);
     const segmentView = new DataView(encodedSegments.arrayBuffer);
 
-    assert.equal(encodedShapeRecords.recordCount, 6);
+    assert.equal(encodedShapeRecords.recordCount, 3);
     assert.equal(encodedShapeRecords.strideInBytes, gpuShapeRecordStrideInBytes);
     assert.equal(shapeView.getUint32(16, true), 0);
     assert.equal(shapeView.getUint32(gpuShapeRecordStrideInBytes + 16, true), 1);
-    assert.equal(encodedSegments.recordCount, 6);
-    assert.equal(encodedSegments.strideInBytes, gpuQuadraticBezierSegmentStrideInBytes);
-    assertApproximatelyEqual(segmentView.getFloat32(0, true), -10);
-    assertApproximatelyEqual(segmentView.getFloat32(4, true), 5);
+    assert.equal(encodedSegments.recordCount, 3);
+    assert.equal(encodedSegments.strideInBytes, gpuCubicBezierSegmentStrideInBytes);
+    assertApproximatelyEqual(segmentView.getFloat32(0, true), -20);
+    assertApproximatelyEqual(segmentView.getFloat32(4, true), 0);
+    assertApproximatelyEqual(segmentView.getFloat32(8, true), -10);
+    assertApproximatelyEqual(segmentView.getFloat32(12, true), 0);
     assertApproximatelyEqual(segmentView.getFloat32(16, true), 10);
-    assertApproximatelyEqual(segmentView.getFloat32(20, true), -5);
+    assertApproximatelyEqual(segmentView.getFloat32(20, true), 0);
+    assertApproximatelyEqual(segmentView.getFloat32(24, true), 20);
+    assertApproximatelyEqual(segmentView.getFloat32(28, true), 0);
   });
 
-  test("keeps the split quadratic join tangent-continuous within one authored cubic", () => {
+  test("preserves authored cubic endpoints and handles after centering and y-flip", () => {
     const frame = createLottieGpuFrame(createStaticPathAnimation(false), 0);
-    const firstSegment = frame.quadraticBezierSegments[0];
-    const secondSegment = frame.quadraticBezierSegments[1];
+    const firstSegment = frame.cubicBezierSegments[0];
+    const secondSegment = frame.cubicBezierSegments[1];
 
     assert.ok(firstSegment);
     assert.ok(secondSegment);
-    assertApproximatelyEqual(firstSegment.cX, secondSegment.aX);
-    assertApproximatelyEqual(firstSegment.cY, secondSegment.aY);
-
-    const firstEndTangent = [firstSegment.cX - firstSegment.bX, firstSegment.cY - firstSegment.bY];
-    const secondStartTangent = [
-      secondSegment.bX - secondSegment.aX,
-      secondSegment.bY - secondSegment.aY,
-    ];
-    const tangentCross =
-      firstEndTangent[0] * secondStartTangent[1] -
-      firstEndTangent[1] * secondStartTangent[0];
-    const tangentDot =
-      firstEndTangent[0] * secondStartTangent[0] +
-      firstEndTangent[1] * secondStartTangent[1];
-
-    assertApproximatelyZero(tangentCross);
-    assert.ok(tangentDot > 0);
+    assertApproximatelyEqual(firstSegment.p0X, -20);
+    assertApproximatelyEqual(firstSegment.p0Y, 0);
+    assertApproximatelyEqual(firstSegment.p3X, 20);
+    assertApproximatelyEqual(firstSegment.p3Y, 0);
+    assertApproximatelyEqual(secondSegment.p0X, 0);
+    assertApproximatelyEqual(secondSegment.p0Y, 20);
+    assertApproximatelyEqual(secondSegment.p3X, 0);
+    assertApproximatelyEqual(secondSegment.p3Y, -20);
   });
 
   test("parses and flattens animated wrapped path keyframes without blanking the frame", () => {
@@ -436,20 +429,20 @@ describe("Lottie GPU frame conversion", () => {
     const midFrame = createLottieGpuFrame(animation, 5);
     const endFrame = createLottieGpuFrame(animation, 10);
 
-    assert.equal(startFrame.shapeRecords.length, 2);
-    assert.equal(midFrame.shapeRecords.length, 2);
-    assert.equal(endFrame.shapeRecords.length, 2);
+    assert.equal(startFrame.shapeRecords.length, 1);
+    assert.equal(midFrame.shapeRecords.length, 1);
+    assert.equal(endFrame.shapeRecords.length, 1);
     assert.deepEqual(
       startFrame.shapeRecords.map((record) => record.pathIndex),
-      [0, 1],
+      [0],
     );
-    assert.ok(startFrame.quadraticBezierSegments.length > 0);
-    assert.ok(midFrame.quadraticBezierSegments.length > 0);
-    assert.ok(endFrame.quadraticBezierSegments.length > 0);
-    assert.notEqual(startFrame.shapeRecords[0]?.boundsMinY, endFrame.shapeRecords[0]?.boundsMinY);
+    assert.ok(startFrame.cubicBezierSegments.length > 0);
+    assert.ok(midFrame.cubicBezierSegments.length > 0);
+    assert.ok(endFrame.cubicBezierSegments.length > 0);
+    assert.notEqual(startFrame.shapeRecords[0]?.positionY, endFrame.shapeRecords[0]?.positionY);
     assert.notEqual(
-      startFrame.quadraticBezierSegments[0]?.aY,
-      endFrame.quadraticBezierSegments[0]?.aY,
+      startFrame.cubicBezierSegments[0]?.p0Y,
+      endFrame.cubicBezierSegments[0]?.p0Y,
     );
   });
 });

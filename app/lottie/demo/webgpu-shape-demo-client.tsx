@@ -4,9 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import invariant from "tiny-invariant";
 import { useEffect, useRef } from "react";
 import {
-  encodeGpuQuadraticBezierSegments,
+  encodeGpuCubicBezierSegments,
   encodeGpuShapeRecords,
-  gpuQuadraticBezierSegmentStrideInBytes,
+  gpuCubicBezierSegmentStrideInBytes,
   gpuShapeRecordStrideInBytes,
 } from "../_lib/gpu-shape-record";
 import { createLottieGpuFrame } from "../_lib/lottie-gpu-frame";
@@ -49,7 +49,7 @@ const writeShapeDemoUniform = (
 type WebGpuShapeDemoSetup = {
   animation: LottieComposition;
   device: GPUDevice;
-  maxQuadraticBezierSegmentCount: number;
+  maxCubicBezierSegmentCount: number;
   maxShapeCount: number;
   presentationFormat: GPUTextureFormat;
   uniformStride: number;
@@ -58,7 +58,7 @@ type WebGpuShapeDemoSetup = {
 type WebGpuShapeFrameData = {
   compositionHeight: number;
   compositionWidth: number;
-  encodedQuadraticBezierSegments: ReturnType<typeof encodeGpuQuadraticBezierSegments>;
+  encodedCubicBezierSegments: ReturnType<typeof encodeGpuCubicBezierSegments>;
   encodedShapeRecords: ReturnType<typeof encodeGpuShapeRecords>;
   shapeCount: number;
 };
@@ -75,8 +75,8 @@ const getShapeFrameData = (animation: LottieComposition, frame: number): WebGpuS
   return {
     compositionHeight: lottieFrame.compositionHeight,
     compositionWidth: lottieFrame.compositionWidth,
-    encodedQuadraticBezierSegments: encodeGpuQuadraticBezierSegments(
-      lottieFrame.quadraticBezierSegments,
+    encodedCubicBezierSegments: encodeGpuCubicBezierSegments(
+      lottieFrame.cubicBezierSegments,
     ),
     encodedShapeRecords: encodeGpuShapeRecords(lottieFrame.shapeRecords),
     shapeCount: lottieFrame.shapeRecords.length,
@@ -88,20 +88,20 @@ const getMaxFramePayloadCounts = (animation: LottieComposition) => {
   const endFrame = Math.max(startFrame, Math.ceil(animation.op) - 1);
 
   let maxShapeCount = 0;
-  let maxQuadraticBezierSegmentCount = 0;
+  let maxCubicBezierSegmentCount = 0;
 
   for (let frame = startFrame; frame <= endFrame; frame += 1) {
     const lottieFrame = createLottieGpuFrame(animation, frame);
 
     maxShapeCount = Math.max(maxShapeCount, lottieFrame.shapeRecords.length);
-    maxQuadraticBezierSegmentCount = Math.max(
-      maxQuadraticBezierSegmentCount,
-      lottieFrame.quadraticBezierSegments.length,
+    maxCubicBezierSegmentCount = Math.max(
+      maxCubicBezierSegmentCount,
+      lottieFrame.cubicBezierSegments.length,
     );
   }
 
   return {
-    maxQuadraticBezierSegmentCount,
+    maxCubicBezierSegmentCount,
     maxShapeCount,
   };
 };
@@ -129,7 +129,7 @@ const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
   return {
     animation,
     device,
-    maxQuadraticBezierSegmentCount: framePayloadCounts.maxQuadraticBezierSegmentCount,
+    maxCubicBezierSegmentCount: framePayloadCounts.maxCubicBezierSegmentCount,
     maxShapeCount: framePayloadCounts.maxShapeCount,
     presentationFormat: navigator.gpu.getPreferredCanvasFormat(),
     uniformStride,
@@ -172,16 +172,16 @@ export const WebGpuShapeDemoClient = ({
     const {
       animation,
       device,
-      maxQuadraticBezierSegmentCount,
+      maxCubicBezierSegmentCount,
       maxShapeCount,
       presentationFormat,
       uniformStride,
     } = setup;
     const drawCapacity = Math.max(maxShapeCount, 1);
-    const quadraticBezierSegmentCapacity = Math.max(maxQuadraticBezierSegmentCount, 1);
+    const cubicBezierSegmentCapacity = Math.max(maxCubicBezierSegmentCount, 1);
     const shapeStorageSize = gpuShapeRecordStrideInBytes * drawCapacity;
-    const quadraticBezierSegmentStorageSize =
-      gpuQuadraticBezierSegmentStrideInBytes * quadraticBezierSegmentCapacity;
+    const cubicBezierSegmentStorageSize =
+      gpuCubicBezierSegmentStrideInBytes * cubicBezierSegmentCapacity;
     const shaderCode = buildShapeDemoShaderSource();
     const shaderModule = device.createShaderModule({ code: shaderCode });
     const bindGroupLayout = device.createBindGroupLayout({
@@ -248,8 +248,8 @@ export const WebGpuShapeDemoClient = ({
       size: shapeStorageSize,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
     });
-    const quadraticBezierSegmentBuffer = device.createBuffer({
-      size: quadraticBezierSegmentStorageSize,
+    const cubicBezierSegmentBuffer = device.createBuffer({
+      size: cubicBezierSegmentStorageSize,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.STORAGE,
     });
     const uniformBuffer = device.createBuffer({
@@ -275,7 +275,7 @@ export const WebGpuShapeDemoClient = ({
         {
           binding: 2,
           resource: {
-            buffer: quadraticBezierSegmentBuffer,
+            buffer: cubicBezierSegmentBuffer,
           },
         },
       ],
@@ -285,7 +285,7 @@ export const WebGpuShapeDemoClient = ({
       const {
         compositionHeight,
         compositionWidth,
-        encodedQuadraticBezierSegments,
+        encodedCubicBezierSegments,
         encodedShapeRecords,
         shapeCount,
       } = getShapeFrameData(animation, frame);
@@ -306,11 +306,11 @@ export const WebGpuShapeDemoClient = ({
         device.queue.writeBuffer(shapeBuffer, 0, encodedShapeRecords.arrayBuffer);
       }
 
-      if (encodedQuadraticBezierSegments.arrayBuffer.byteLength > 0) {
+      if (encodedCubicBezierSegments.arrayBuffer.byteLength > 0) {
         device.queue.writeBuffer(
-          quadraticBezierSegmentBuffer,
+          cubicBezierSegmentBuffer,
           0,
-          encodedQuadraticBezierSegments.arrayBuffer,
+          encodedCubicBezierSegments.arrayBuffer,
         );
       }
 

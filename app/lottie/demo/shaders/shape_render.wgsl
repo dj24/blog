@@ -115,12 +115,13 @@ fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
 
   if (shape.kind == SHAPE_KIND_PATH) {
     let half_stroke_width = max(shape.width, 0.001) * 0.5;
-    let segment = quadraticBezierSegments[shape.pathIndex];
-    let curve_distance = sd_quadratic_bezier(
+    let segment = cubicBezierSegments[shape.pathIndex];
+    let curve_distance = sd_cubic_bezier(
       local_p,
-      vec2f(segment.aX, segment.aY),
-      vec2f(segment.bX, segment.bY),
-      vec2f(segment.cX, segment.cY),
+      vec2f(segment.p0X, segment.p0Y),
+      vec2f(segment.c1X, segment.c1Y),
+      vec2f(segment.c2X, segment.c2Y),
+      vec2f(segment.p3X, segment.p3Y),
     );
 
     return abs(curve_distance) - half_stroke_width;
