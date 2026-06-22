@@ -135,15 +135,11 @@ const destroyTileBucketResources = (resources: WebGpuTileBucketResources | null)
   resources?.indirectDispatchArgsBuffer.destroy();
 };
 
-const destroyRasterTargetResources = (
-  resources: WebGpuRasterTargetResources | null,
-) => {
+const destroyRasterTargetResources = (resources: WebGpuRasterTargetResources | null) => {
   resources?.texture.destroy();
 };
 
-const createTimestampQueryResources = (
-  device: GPUDevice,
-): WebGpuTimestampQueryResources => {
+const createTimestampQueryResources = (device: GPUDevice): WebGpuTimestampQueryResources => {
   return {
     querySet: device.createQuerySet({
       count: timestampQueryCount,
@@ -156,9 +152,7 @@ const createTimestampQueryResources = (
   };
 };
 
-const destroyTimestampQueryResources = (
-  resources: WebGpuTimestampQueryResources | null,
-) => {
+const destroyTimestampQueryResources = (resources: WebGpuTimestampQueryResources | null) => {
   resources?.querySet.destroy();
   resources?.resolveBuffer.destroy();
 };
@@ -177,6 +171,22 @@ const formatRenderTimingLabel = ({
   totalDurationInNanoseconds: bigint;
 }) => {
   return `GPU render ${formatDurationInMilliseconds(totalDurationInNanoseconds)} (compute ${formatDurationInMilliseconds(computeDurationInNanoseconds)}, raster ${formatDurationInMilliseconds(renderDurationInNanoseconds)})`;
+};
+
+const getAnimationSignature = (animation?: LottieComposition) => {
+  if (!animation) {
+    return squareDotLottieAssetUrl;
+  }
+
+  return JSON.stringify({
+    fr: animation.fr,
+    h: animation.h,
+    layerCount: animation.layers.length,
+    markerCount: animation.markers?.length ?? 0,
+    nm: animation.nm ?? "provided-animation",
+    op: animation.op,
+    w: animation.w,
+  });
 };
 
 const readTimestampPassDurations = async ({
@@ -223,8 +233,7 @@ const logTileBuckets = async ({
 }) => {
   const tileCount = tileWidth * tileHeight;
   const tileCountSizeInBytes = tileCount * Uint32Array.BYTES_PER_ELEMENT;
-  const tileIndexSizeInBytes =
-    tileCount * maxShapesPerTile * Uint32Array.BYTES_PER_ELEMENT;
+  const tileIndexSizeInBytes = tileCount * maxShapesPerTile * Uint32Array.BYTES_PER_ELEMENT;
   const tileShapeCountReadbackBuffer = device.createBuffer({
     size: tileCountSizeInBytes,
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
@@ -264,9 +273,7 @@ const logTileBuckets = async ({
     const rawCount = countData[tileIndex] ?? 0;
     const clampedCount = Math.min(rawCount, maxShapesPerTile);
     const bucketOffset = tileIndex * maxShapesPerTile;
-    const shapeIndices = Array.from(
-      indexData.slice(bucketOffset, bucketOffset + clampedCount),
-    );
+    const shapeIndices = Array.from(indexData.slice(bucketOffset, bucketOffset + clampedCount));
 
     return {
       shapeIndices,
@@ -294,9 +301,7 @@ const getShapeFrameData = (animation: LottieComposition, frame: number): WebGpuS
   return {
     compositionHeight: lottieFrame.compositionHeight,
     compositionWidth: lottieFrame.compositionWidth,
-    encodedCubicBezierSegments: encodeGpuCubicBezierSegments(
-      lottieFrame.cubicBezierSegments,
-    ),
+    encodedCubicBezierSegments: encodeGpuCubicBezierSegments(lottieFrame.cubicBezierSegments),
     encodedGradientStops: encodeGpuGradientStops(lottieFrame.gradientStops),
     encodedShapeRecords: encodeGpuShapeRecords(lottieFrame.shapeRecords),
     shapeCount: lottieFrame.shapeRecords.length,
@@ -329,12 +334,18 @@ const getMaxFramePayloadCounts = (animation: LottieComposition) => {
   };
 };
 
-const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
-  const response = await fetch(squareDotLottieAssetUrl);
+const getWebGpuShapeDemoSetup = async (
+  animationOverride?: LottieComposition,
+): Promise<WebGpuShapeDemoSetup> => {
+  const animation = animationOverride
+    ? animationOverride
+    : await (async () => {
+        const response = await fetch(squareDotLottieAssetUrl);
 
-  invariant(response.ok, "The square.lottie demo asset could not be loaded.");
+        invariant(response.ok, "The square.lottie demo asset could not be loaded.");
 
-  const animation = await readLottieJson("square.lottie", await response.arrayBuffer());
+        return readLottieJson("square.lottie", await response.arrayBuffer());
+      })();
 
   invariant("gpu" in navigator, "WebGPU is not available in this browser.");
 
@@ -376,21 +387,22 @@ const getWebGpuShapeDemoSetup = async (): Promise<WebGpuShapeDemoSetup> => {
 };
 
 export const WebGpuShapeDemoClient = ({
+  animation,
   compact = false,
   currentFrame = 0,
 }: {
+  animation?: LottieComposition;
   compact?: boolean;
   currentFrame?: number;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const currentFrameRef = useRef(currentFrame);
   const renderStateRef = useRef<WebGpuRenderState | null>(null);
-  const [renderTimingLabel, setRenderTimingLabel] = useState(
-    "GPU render timing unavailable.",
-  );
+  const [renderTimingLabel, setRenderTimingLabel] = useState("GPU render timing unavailable.");
+  const animationSignature = getAnimationSignature(animation);
   const webGpuShapeDemoQuery = useQuery({
-    queryKey: ["webgpu-shape-demo", squareDotLottieAssetUrl],
-    queryFn: getWebGpuShapeDemoSetup,
+    queryKey: ["webgpu-shape-demo", animationSignature],
+    queryFn: () => getWebGpuShapeDemoSetup(animation),
     staleTime: Number.POSITIVE_INFINITY,
   });
 
@@ -429,8 +441,7 @@ export const WebGpuShapeDemoClient = ({
       gpuCubicBezierSegmentStrideInBytes * cubicBezierSegmentCapacity;
     const gradientStopStorageSize = gpuGradientStopStrideInBytes * gradientStopCapacity;
     const shaderCode = buildShapeDemoShaderSource({
-      rasterTargetFormat:
-        canvasFormat === "bgra8unorm" ? "bgra8unorm" : "rgba8unorm",
+      rasterTargetFormat: canvasFormat === "bgra8unorm" ? "bgra8unorm" : "rgba8unorm",
     });
     const shaderModule = device.createShaderModule({ code: shaderCode });
     const compactionBindGroupLayout = device.createBindGroupLayout({
@@ -721,21 +732,17 @@ export const WebGpuShapeDemoClient = ({
       const uniformView = new DataView(uniformArrayBuffer);
 
       for (let index = 0; index < shapeCount; index += 1) {
-        writeShapeDemoUniform(
-          uniformView,
-          index * uniformStride,
-          {
-            activeShapeIndex: index,
-            canvasHeight: height,
-            canvasWidth: width,
-            compositionHeight,
-            compositionWidth,
-            maxShapesPerTile: drawCapacity,
-            shapeCount,
-            tileHeight,
-            tileWidth,
-          },
-        );
+        writeShapeDemoUniform(uniformView, index * uniformStride, {
+          activeShapeIndex: index,
+          canvasHeight: height,
+          canvasWidth: width,
+          compositionHeight,
+          compositionWidth,
+          maxShapesPerTile: drawCapacity,
+          shapeCount,
+          tileHeight,
+          tileWidth,
+        });
       }
 
       const finalPassUniformOffset = uniformStride * drawCapacity;

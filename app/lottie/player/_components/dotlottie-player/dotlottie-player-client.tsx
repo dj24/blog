@@ -131,7 +131,7 @@ export const DotlottiePlayerClient = ({
     <div className={styles.playerShell}>
       <div className={styles.playerFrame}>
         <DotLottieReact
-          aria-label="Square Lottie animation"
+          aria-label="Lottie animation"
           className={styles.playerCanvas}
           dotLottieRefCallback={setPlayer}
           renderConfig={{ autoResize: true }}
@@ -152,12 +152,12 @@ export const DotlottiePlayerClient = ({
           </div>
         </div>
 
-        <label className={styles.scrubberLabel} htmlFor="square-frame-scrubber">
+        <label className={styles.scrubberLabel} htmlFor="lottie-frame-scrubber">
           Scrub through every frame
         </label>
         <input
           className={styles.scrubber}
-          id="square-frame-scrubber"
+          id="lottie-frame-scrubber"
           max={maxFrame}
           min={0}
           onChange={handleScrub}

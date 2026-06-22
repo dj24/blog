@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { LottieComposition } from "../_lib/types/lottie-composition";
 import styles from "./page.module.css";
 
 const WebGpuShapeDemoClient = dynamic(
@@ -16,11 +17,15 @@ const WebGpuShapeDemoClient = dynamic(
 );
 
 export const WebGpuShapeDemo = ({
+  animation,
   compact = false,
   currentFrame = 0,
 }: {
+  animation?: LottieComposition;
   compact?: boolean;
   currentFrame?: number;
 }) => {
-  return <WebGpuShapeDemoClient compact={compact} currentFrame={currentFrame} />;
+  return (
+    <WebGpuShapeDemoClient animation={animation} compact={compact} currentFrame={currentFrame} />
+  );
 };

@@ -1,0 +1,246 @@
+.page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgb(247 148 29 / 0.24), transparent 28rem),
+    radial-gradient(circle at top right, rgb(59 130 246 / 0.18), transparent 24rem),
+    linear-gradient(180deg, #f6efe3 0%, #ece6da 48%, #f7f3eb 100%);
+  color: #171412;
+  padding: clamp(24px, 5vw, 64px);
+}
+
+.content {
+  display: grid;
+  gap: 28px;
+  margin: 0 auto;
+}
+
+.hero {
+  display: grid;
+  gap: 16px;
+  max-width: 860px;
+}
+
+.eyebrow {
+  color: #9a3412;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.title {
+  font-size: clamp(2.8rem, 7vw, 5.8rem);
+  font-weight: 840;
+  letter-spacing: -0.06em;
+  line-height: 0.92;
+  margin: 0;
+}
+
+.summary {
+  color: #51473c;
+  font-size: clamp(1rem, 2vw, 1.18rem);
+  line-height: 1.7;
+  margin: 0;
+  max-width: 68ch;
+}
+
+.metrics {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metricCard,
+.actionsPanel,
+.detailPanel,
+.markerPanel,
+.placeholderPanel {
+  border: 1px solid #1f1f1f;
+  background: rgb(255 251 243 / 0.92);
+  box-shadow: 12px 12px 0 rgb(17 17 17 / 0.9);
+}
+
+.metricCard {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.metricLabel {
+  color: #7a6551;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.metricValue {
+  font-size: 1.24rem;
+  font-weight: 780;
+}
+
+.metricNote,
+.panelNote,
+.placeholderCopy,
+.errorNotice {
+  color: #50483d;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.actionsPanel,
+.detailPanel,
+.markerPanel,
+.placeholderPanel {
+  overflow: hidden;
+}
+
+.actionsHeader,
+.detailHeader,
+.placeholderHeader {
+  align-items: center;
+  border-bottom: 1px solid #1f1f1f;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 16px 18px;
+}
+
+.panelTitle {
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px;
+}
+
+.downloadLink {
+  border: 1px solid #1f1f1f;
+  background: #1f1f1f;
+  color: #fff9ed;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  justify-content: center;
+  letter-spacing: 0.08em;
+  min-width: 160px;
+  padding: 11px 16px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.downloadLinkDisabled {
+  background: #d6d3d1;
+  color: #7c746b;
+}
+
+.status,
+.detailBadge {
+  border: 1px solid #1f1f1f;
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  text-transform: uppercase;
+}
+
+.status[data-status="ready"] {
+  background: #bbf7d0;
+}
+
+.status[data-status="loading"] {
+  background: #fde68a;
+}
+
+.status[data-status="error"] {
+  background: #fecaca;
+}
+
+.detailBadge {
+  background: #dbeafe;
+}
+
+.errorNotice {
+  border-top: 1px solid #1f1f1f;
+  background: #fff1f2;
+  padding: 18px;
+}
+
+.placeholderCopy {
+  padding: 18px;
+}
+
+.detailsLayout {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.definitionList {
+  display: grid;
+  gap: 1px;
+  background: #d7ccba;
+}
+
+.definitionRow {
+  align-items: center;
+  background: rgb(255 251 243 / 0.92);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 14px 18px;
+}
+
+.definitionRow dt {
+  color: #50483d;
+  text-transform: capitalize;
+}
+
+.definitionRow dd {
+  font-weight: 760;
+  margin: 0;
+}
+
+.markerGrid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 18px;
+}
+
+.markerCard {
+  border: 1px solid #1f1f1f;
+  background: #fff8eb;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+@media (max-width: 960px) {
+  .metrics,
+  .detailsLayout,
+  .markerGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .metricCard,
+  .actionsPanel,
+  .detailPanel,
+  .markerPanel,
+  .placeholderPanel {
+    box-shadow: 8px 8px 0 rgb(17 17 17 / 0.9);
+  }
+
+  .actionsHeader,
+  .detailHeader,
+  .placeholderHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

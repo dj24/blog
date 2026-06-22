@@ -54,8 +54,7 @@ const PlayerPage = async () => {
   return (
     <main className={styles.page}>
       <div className={styles.content}>
-        <PlayerComparison initialFrame={initialFrame} src={publicAssetPath} />
-
+        <PlayerComparison animation={animation} initialFrame={initialFrame} src={publicAssetPath} />
         <section className={styles.factsSection}>
           <aside className={styles.panel}>
             <div className={styles.panelHeader}>

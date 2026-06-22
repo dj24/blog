@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import type { LottieComposition } from "../../_lib/types/lottie-composition";
 import { WebGpuShapeDemo } from "../../demo/webgpu-shape-demo";
 import styles from "../page.module.css";
 import { DotlottiePlayer } from "./dotlottie-player/dotlottie-player";
 
 type PlayerComparisonProps = {
+  animation: LottieComposition;
   initialFrame: number;
   src: string;
 };
 
-export const PlayerComparison = ({ initialFrame, src }: PlayerComparisonProps) => {
+export const PlayerComparison = ({ animation, initialFrame, src }: PlayerComparisonProps) => {
   const [currentFrame, setCurrentFrame] = useState(initialFrame);
 
   return (
@@ -33,7 +35,7 @@ export const PlayerComparison = ({ initialFrame, src }: PlayerComparisonProps) =
           <span className={styles.status}>Frame {currentFrame}</span>
         </div>
         <div className={styles.demoPanelBody}>
-          <WebGpuShapeDemo compact currentFrame={currentFrame} />
+          <WebGpuShapeDemo animation={animation} compact currentFrame={currentFrame} />
         </div>
       </article>
     </section>

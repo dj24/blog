@@ -16,6 +16,11 @@ const lottieSubpages = [
     segment: "player",
   },
   {
+    href: "/lottie/stress",
+    label: "Stress",
+    segment: "stress",
+  },
+  {
     href: "/lottie/shapes",
     label: "Shapes",
     segment: "shapes",
