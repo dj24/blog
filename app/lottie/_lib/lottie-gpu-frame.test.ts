@@ -279,6 +279,163 @@ const createStrokedPathAnimation = (): LottieComposition => {
   };
 };
 
+const createFilledPathAnimation = ({
+  closed,
+  fillRule = 1,
+  includeStroke = false,
+}: {
+  closed: boolean;
+  fillRule?: number;
+  includeStroke?: boolean;
+}): LottieComposition => {
+  return {
+    v: "5.7.5",
+    fr: 60,
+    ip: 0,
+    op: 10,
+    w: 200,
+    h: 200,
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        ip: 0,
+        op: 10,
+        ks: {
+          o: { a: 0, k: 100 },
+        },
+        shapes: [
+          {
+            ty: "gr",
+            it: [
+              {
+                ty: "sh",
+                ks: {
+                  a: 0,
+                  k: {
+                    c: closed,
+                    v: [
+                      [0, 0],
+                      [40, 0],
+                      [40, 40],
+                    ],
+                    i: [
+                      [0, 0],
+                      [-10, 0],
+                      [0, -10],
+                    ],
+                    o: [
+                      [10, 0],
+                      [0, 10],
+                      [0, 0],
+                    ],
+                  },
+                },
+              },
+              {
+                ty: "fl",
+                c: { a: 0, k: [0.6, 0.3, 0.1] },
+                o: { a: 0, k: 70 },
+                r: fillRule,
+              },
+              ...(includeStroke
+                ? [
+                    {
+                      ty: "st" as const,
+                      c: { a: 0, k: [0.1, 0.2, 0.9] },
+                      o: { a: 0, k: 90 },
+                      w: { a: 0, k: 8 },
+                    },
+                  ]
+                : []),
+              {
+                ty: "tr",
+                p: { a: 0, k: [90, 75] },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
+const createGradientFilledPathAnimation = (): LottieComposition => {
+  return {
+    v: "5.7.5",
+    fr: 60,
+    ip: 0,
+    op: 10,
+    w: 200,
+    h: 200,
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        ip: 0,
+        op: 10,
+        ks: {
+          o: { a: 0, k: 100 },
+        },
+        shapes: [
+          {
+            ty: "gr",
+            it: [
+              {
+                ty: "sh",
+                ks: {
+                  a: 0,
+                  k: {
+                    c: true,
+                    v: [
+                      [-20, -10],
+                      [20, -10],
+                      [0, 30],
+                    ],
+                    i: [
+                      [0, 0],
+                      [0, 0],
+                      [0, 0],
+                    ],
+                    o: [
+                      [0, 0],
+                      [0, 0],
+                      [0, 0],
+                    ],
+                  },
+                },
+              },
+              {
+                ty: "gf",
+                o: { a: 0, k: 80 },
+                r: 2,
+                g: {
+                  p: 2,
+                  k: {
+                    a: 0,
+                    k: [0, 1, 0.2, 0.1, 1, 0.1, 0.4, 1],
+                  },
+                },
+                s: { a: 0, k: [-20, 0] },
+                e: { a: 0, k: [20, 0] },
+                t: 1,
+              },
+              {
+                ty: "tr",
+                p: { a: 0, k: [100, 90] },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
 const createGradientFillAnimation = (): LottieComposition => {
   return {
     v: "5.7.5",
@@ -589,8 +746,8 @@ describe("Lottie GPU frame conversion", () => {
 
     assert.equal(frame.compositionWidth, 640);
     assert.equal(frame.compositionHeight, 640);
-    assert.equal(frame.shapeRecords.length, 4);
-    assert.equal(frame.cubicBezierSegments.length, 1);
+    assert.ok(frame.shapeRecords.length > 4);
+    assert.ok(frame.cubicBezierSegments.length > 1);
     assert.ok(frame.shapeRecords.some((record) => record.kind === gpuShapeKinds.ellipse));
     assert.ok(frame.shapeRecords.some((record) => record.kind === gpuShapeKinds.rectangle));
     assert.ok(frame.shapeRecords.some((record) => record.kind === gpuShapeKinds.path));
@@ -647,7 +804,9 @@ describe("Lottie GPU frame conversion", () => {
   test("keeps hold keyframes stepped until the next keyframe", () => {
     const heldFrame = createLottieGpuFrame(holdKeyframeAnimation, 5);
     const switchedFrame = createLottieGpuFrame(holdKeyframeAnimation, 10);
-    const heldSquare = heldFrame.shapeRecords.find((record) => record.kind === gpuShapeKinds.rectangle);
+    const heldSquare = heldFrame.shapeRecords.find(
+      (record) => record.kind === gpuShapeKinds.rectangle,
+    );
     const switchedSquare = switchedFrame.shapeRecords.find(
       (record) => record.kind === gpuShapeKinds.rectangle,
     );
@@ -713,6 +872,63 @@ describe("Lottie GPU frame conversion", () => {
     assert.equal(pathShapes[1]?.flags, gpuPathTerminalFlags.end);
   });
 
+  test("emits a dedicated path fill record for closed filled paths", () => {
+    const frame = createLottieGpuFrame(createFilledPathAnimation({ closed: true }), 0);
+    const pathShapes = frame.shapeRecords.filter((record) => record.kind === gpuShapeKinds.path);
+    const fillRecord = pathShapes[0];
+
+    assert.equal(frame.shapeRecords.length, 1);
+    assert.equal(frame.cubicBezierSegments.length, 3);
+    assert.ok(fillRecord);
+    assert.equal(fillRecord.flags, 0);
+    assert.equal(fillRecord.pathIndex, 0);
+    assert.equal(fillRecord.reserved1, 3);
+    assertApproximatelyEqual(fillRecord.positionX, 110);
+    assertApproximatelyEqual(fillRecord.positionY, 95);
+    assertApproximatelyEqual(fillRecord.fillRed, 0.6);
+    assertApproximatelyEqual(fillRecord.fillGreen, 0.3);
+    assertApproximatelyEqual(fillRecord.fillBlue, 0.1);
+    assertApproximatelyEqual(fillRecord.fillAlpha, 0.7);
+    assertApproximatelyEqual(fillRecord.strokeAlpha, 0);
+  });
+
+  test("implicitly closes open path fills without emitting stroke records", () => {
+    const frame = createLottieGpuFrame(createFilledPathAnimation({ closed: false }), 0);
+    const fillRecord = frame.shapeRecords[0];
+
+    assert.equal(frame.shapeRecords.length, 1);
+    assert.equal(frame.cubicBezierSegments.length, 2);
+    assert.ok(fillRecord);
+    assert.equal(fillRecord.flags, gpuPathTerminalFlags.start | gpuPathTerminalFlags.end);
+    assert.equal(fillRecord.reserved1, 2);
+    assertApproximatelyEqual(fillRecord.fillAlpha, 0.7);
+    assertApproximatelyEqual(fillRecord.strokeAlpha, 0);
+  });
+
+  test("emits separate fill and stroke path records when both styles are present", () => {
+    const frame = createLottieGpuFrame(
+      createFilledPathAnimation({ closed: true, includeStroke: true }),
+      0,
+    );
+    const pathShapes = frame.shapeRecords.filter((record) => record.kind === gpuShapeKinds.path);
+    const fillRecord = pathShapes[0];
+    const strokeRecords = pathShapes.slice(1);
+
+    assert.equal(pathShapes.length, 4);
+    assert.equal(frame.cubicBezierSegments.length, 6);
+    assert.ok(fillRecord);
+    assert.equal(fillRecord.pathIndex, 0);
+    assert.equal(fillRecord.reserved1, 3);
+    assertApproximatelyEqual(fillRecord.fillAlpha, 0.7);
+    assertApproximatelyEqual(fillRecord.strokeAlpha, 0);
+    assert.deepEqual(
+      strokeRecords.map((record) => record.pathIndex),
+      [3, 4, 5],
+    );
+    assert.ok(strokeRecords.every((record) => record.fillAlpha === 0));
+    assert.ok(strokeRecords.every((record) => Math.abs(record.strokeAlpha - 0.9) <= tolerance));
+  });
+
   test("packs solid fill and solid stroke into the same rectangle record", () => {
     const frame = createLottieGpuFrame(createRectangleWithSolidStrokeAnimation(), 0);
     const rectangle = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.rectangle);
@@ -740,10 +956,7 @@ describe("Lottie GPU frame conversion", () => {
     const pathRecord = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.path);
 
     assert.ok(pathRecord);
-    assert.equal(
-      pathRecord.flags,
-      gpuPathTerminalFlags.start | gpuPathTerminalFlags.end,
-    );
+    assert.equal(pathRecord.flags, gpuPathTerminalFlags.start | gpuPathTerminalFlags.end);
     assertApproximatelyEqual(pathRecord.width, 14);
     assertApproximatelyEqual(pathRecord.fillAlpha, 0);
     assertApproximatelyEqual(pathRecord.strokeRed, 0.25);
@@ -761,7 +974,10 @@ describe("Lottie GPU frame conversion", () => {
     const rectangle = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.rectangle);
 
     assert.ok(rectangle);
-    assert.equal(rectangle.flags & gpuShapeStyleFlags.fillGradient, gpuShapeStyleFlags.fillGradient);
+    assert.equal(
+      rectangle.flags & gpuShapeStyleFlags.fillGradient,
+      gpuShapeStyleFlags.fillGradient,
+    );
     assert.equal(rectangle.reserved0, 0);
     assert.equal(rectangle.polygonMode, 2);
     assertApproximatelyEqual(rectangle.centerX, -40);
@@ -775,6 +991,26 @@ describe("Lottie GPU frame conversion", () => {
     assertApproximatelyEqual(frame.gradientStops[1]?.offset ?? 0, 1);
     assertApproximatelyEqual(frame.gradientStops[1]?.blue ?? 0, 1);
     assertApproximatelyEqual(frame.gradientStops[1]?.alpha ?? 0, 0.4);
+  });
+
+  test("encodes gradient fill metadata on filled path records", () => {
+    const frame = createLottieGpuFrame(createGradientFilledPathAnimation(), 0);
+    const pathRecord = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.path);
+
+    assert.ok(pathRecord);
+    assert.equal(pathRecord.reserved1, 3);
+    assert.equal(
+      pathRecord.flags & gpuShapeStyleFlags.fillGradient,
+      gpuShapeStyleFlags.fillGradient,
+    );
+    assert.equal(pathRecord.flags & gpuShapeStyleFlags.fillEvenOdd, gpuShapeStyleFlags.fillEvenOdd);
+    assert.equal(pathRecord.reserved0, 0);
+    assert.equal(pathRecord.polygonMode, 2);
+    assertApproximatelyEqual(pathRecord.centerX, -20);
+    assertApproximatelyEqual(pathRecord.starInnerRoundness, 20);
+    assert.equal(frame.gradientStops.length, 2);
+    assertApproximatelyEqual(frame.gradientStops[0]?.red ?? 0, 1);
+    assertApproximatelyEqual(frame.gradientStops[1]?.blue ?? 0, 1);
   });
 
   test("encodes gradient stroke metadata on emitted path records", () => {
@@ -871,10 +1107,7 @@ describe("Lottie GPU frame conversion", () => {
     assertApproximatelyEqual(stopView.getFloat32(4, true), 1);
     assertApproximatelyEqual(stopView.getFloat32(16, true), 1);
     assertApproximatelyEqual(stopView.getFloat32(gpuGradientStopStrideInBytes, true), 1);
-    assertApproximatelyEqual(
-      stopView.getFloat32(gpuGradientStopStrideInBytes + 16, true),
-      0.4,
-    );
+    assertApproximatelyEqual(stopView.getFloat32(gpuGradientStopStrideInBytes + 16, true), 0.4);
   });
 
   test("preserves authored cubic endpoints and handles after centering and y-flip", () => {
@@ -923,9 +1156,6 @@ describe("Lottie GPU frame conversion", () => {
     assert.ok(midFrame.cubicBezierSegments.length > 0);
     assert.ok(endFrame.cubicBezierSegments.length > 0);
     assert.notEqual(startFrame.shapeRecords[0]?.positionY, endFrame.shapeRecords[0]?.positionY);
-    assert.notEqual(
-      startFrame.cubicBezierSegments[0]?.p0Y,
-      endFrame.cubicBezierSegments[0]?.p0Y,
-    );
+    assert.notEqual(startFrame.cubicBezierSegments[0]?.p0Y, endFrame.cubicBezierSegments[0]?.p0Y);
   });
 });

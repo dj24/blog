@@ -7,10 +7,12 @@ const SHAPE_FLAG_FILL_GRADIENT: u32 = 1u << 2u;
 const SHAPE_FLAG_STROKE_GRADIENT: u32 = 1u << 3u;
 const SHAPE_FLAG_FILL_GRADIENT_RADIAL: u32 = 1u << 4u;
 const SHAPE_FLAG_STROKE_GRADIENT_RADIAL: u32 = 1u << 5u;
+const SHAPE_FLAG_FILL_EVEN_ODD: u32 = 1u << 6u;
 const STROKE_CAP_BUTT: u32 = 1u;
 const STROKE_CAP_ROUND: u32 = 2u;
 const STROKE_CAP_SQUARE: u32 = 3u;
 const TILE_SIZE_PX: u32 = 32u;
+const PATH_FILL_SUBDIVISIONS: u32 = 12u;
 
 struct DemoUniforms {
   activeShapeIndex: u32,
@@ -217,6 +219,15 @@ fn stroke_gradient_stop_count(shape: ShapeRecord) -> u32 {
   return shape.mergeMode;
 }
 
+fn path_segment_count(shape: ShapeRecord) -> u32 {
+  return shape.reserved1;
+}
+
+fn path_fill_is_open(shape: ShapeRecord) -> bool {
+  return has_path_terminal_flag(shape, PATH_TERMINAL_START) ||
+    has_path_terminal_flag(shape, PATH_TERMINAL_END);
+}
+
 fn linear_gradient_ratio(local_p: vec2f, start: vec2f, end: vec2f) -> f32 {
   let axis = end - start;
   let axis_length_squared = dot(axis, axis);
@@ -322,6 +333,136 @@ fn cubic_start_tangent(p0: vec2f, c1: vec2f, c2: vec2f, p3: vec2f) -> vec2f {
 
 fn cubic_end_tangent(p0: vec2f, c1: vec2f, c2: vec2f, p3: vec2f) -> vec2f {
   return safe_normalize_or_fallback(p3 - c2, safe_normalize_or_fallback(p3 - c1, p3 - p0));
+}
+
+fn sampled_cubic_bezier_point(
+  p0: vec2f,
+  c1: vec2f,
+  c2: vec2f,
+  p3: vec2f,
+  t: f32,
+) -> vec2f {
+  let inverse_t = 1.0 - t;
+  let inverse_t_squared = inverse_t * inverse_t;
+  let t_squared = t * t;
+
+  return inverse_t_squared * inverse_t * p0 +
+    3.0 * inverse_t_squared * t * c1 +
+    3.0 * inverse_t * t_squared * c2 +
+    t_squared * t * p3;
+}
+
+fn sd_line_segment(local_p: vec2f, a: vec2f, b: vec2f) -> f32 {
+  let segment = b - a;
+  let segment_length_squared = dot(segment, segment);
+
+  if (segment_length_squared <= 0.000001) {
+    return length(local_p - a);
+  }
+
+  let t = clamp(dot(local_p - a, segment) / segment_length_squared, 0.0, 1.0);
+  let closest_point = a + segment * t;
+
+  return length(local_p - closest_point);
+}
+
+fn ray_crosses_edge(local_p: vec2f, a: vec2f, b: vec2f) -> bool {
+  let straddles = (a.y > local_p.y) != (b.y > local_p.y);
+
+  if (!straddles) {
+    return false;
+  }
+
+  let interpolation = (local_p.y - a.y) / (b.y - a.y);
+  let intersection_x = a.x + interpolation * (b.x - a.x);
+
+  return intersection_x > local_p.x;
+}
+
+fn edge_winding_delta(local_p: vec2f, a: vec2f, b: vec2f) -> i32 {
+  if (!ray_crosses_edge(local_p, a, b)) {
+    return 0;
+  }
+
+  return select(-1, 1, b.y > a.y);
+}
+
+fn evaluate_path_fill_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
+  let segment_count = path_segment_count(shape);
+
+  if (segment_count == 0u) {
+    return 1e6;
+  }
+
+  var minimum_distance = 1e6;
+  var parity_crossings = 0u;
+  var winding_number = 0;
+  var first_point = vec2f(0.0);
+  var last_point = vec2f(0.0);
+  var first_point_initialized = false;
+
+  for (var segment_offset = 0u; segment_offset < segment_count; segment_offset = segment_offset + 1u) {
+    let segment = cubicBezierSegments[shape.pathIndex + segment_offset];
+    let p0 = vec2f(segment.p0X, segment.p0Y);
+    let c1 = vec2f(segment.c1X, segment.c1Y);
+    let c2 = vec2f(segment.c2X, segment.c2Y);
+    let p3 = vec2f(segment.p3X, segment.p3Y);
+    var previous_point = p0;
+
+    if (!first_point_initialized) {
+      first_point = p0;
+      first_point_initialized = true;
+    }
+
+    for (var step = 1u; step <= PATH_FILL_SUBDIVISIONS; step = step + 1u) {
+      let t = f32(step) / f32(PATH_FILL_SUBDIVISIONS);
+      let point = sampled_cubic_bezier_point(p0, c1, c2, p3, t);
+
+      minimum_distance = min(minimum_distance, sd_line_segment(local_p, previous_point, point));
+
+      if (ray_crosses_edge(local_p, previous_point, point)) {
+        parity_crossings = parity_crossings + 1u;
+      }
+
+      winding_number = winding_number + edge_winding_delta(local_p, previous_point, point);
+      previous_point = point;
+      last_point = point;
+    }
+  }
+
+  if (path_fill_is_open(shape) && first_point_initialized) {
+    minimum_distance = min(minimum_distance, sd_line_segment(local_p, last_point, first_point));
+
+    if (ray_crosses_edge(local_p, last_point, first_point)) {
+      parity_crossings = parity_crossings + 1u;
+    }
+
+    winding_number = winding_number + edge_winding_delta(local_p, last_point, first_point);
+  }
+
+  let is_inside = select(
+    winding_number != 0,
+    (parity_crossings & 1u) == 1u,
+    has_shape_style_flag(shape, SHAPE_FLAG_FILL_EVEN_ODD),
+  );
+
+  return select(minimum_distance, -minimum_distance, is_inside);
+}
+
+fn evaluate_path_stroke_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
+  let half_stroke_width = max(shape.width, 0.001) * 0.5;
+  let segment = cubicBezierSegments[shape.pathIndex];
+  let curve_distance = sd_cubic_bezier(
+    local_p,
+    vec2f(segment.p0X, segment.p0Y),
+    vec2f(segment.c1X, segment.c1Y),
+    vec2f(segment.c2X, segment.c2Y),
+    vec2f(segment.p3X, segment.p3Y),
+  );
+  let stroke_sdf = abs(curve_distance) - half_stroke_width;
+  let clip_sdf = path_cap_clipping_sdf(shape, local_p, segment, half_stroke_width);
+
+  return max(stroke_sdf, clip_sdf);
 }
 
 fn endpoint_clip_sdf(
@@ -556,19 +697,11 @@ fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
   }
 
   if (shape.kind == SHAPE_KIND_PATH) {
-    let half_stroke_width = max(shape.width, 0.001) * 0.5;
-    let segment = cubicBezierSegments[shape.pathIndex];
-    let curve_distance = sd_cubic_bezier(
-      local_p,
-      vec2f(segment.p0X, segment.p0Y),
-      vec2f(segment.c1X, segment.c1Y),
-      vec2f(segment.c2X, segment.c2Y),
-      vec2f(segment.p3X, segment.p3Y),
-    );
-    let stroke_sdf = abs(curve_distance) - half_stroke_width;
-    let clip_sdf = path_cap_clipping_sdf(shape, local_p, segment, half_stroke_width);
+    if (has_visible_fill(shape)) {
+      return evaluate_path_fill_sdf(shape, local_p);
+    }
 
-    return max(stroke_sdf, clip_sdf);
+    return evaluate_path_stroke_sdf(shape, local_p);
   }
 
   return 1e6;
@@ -586,27 +719,59 @@ fn rasterized_shape_sample(shape: ShapeRecord, pixel_pos: vec2f) -> vec4f {
   let layer_opacity = clamp(shape.opacity, 0.0, 1.0);
 
   if (shape.kind == SHAPE_KIND_PATH) {
-    let coverage = fill_from_sdf(sd, aa_width);
+    let fill_coverage = select(
+      0.0,
+      fill_from_sdf(evaluate_path_fill_sdf(shape, local_p), aa_width),
+      has_visible_fill(shape),
+    );
+    let stroke_coverage = select(
+      0.0,
+      fill_from_sdf(evaluate_path_stroke_sdf(shape, local_p), aa_width),
+      has_visible_stroke(shape),
+    );
+    var sample = vec4f(0.0);
 
-    if (coverage <= 0.0) {
+    if (fill_coverage > 0.0) {
+      if (has_shape_style_flag(shape, SHAPE_FLAG_FILL_GRADIENT)) {
+        let gradient_sample = sample_fill_gradient(shape, local_p);
+        let fill_alpha =
+          fill_coverage * clamp(layer_opacity * shape.fillAlpha * gradient_sample.a, 0.0, 1.0);
+
+        if (fill_alpha > 0.0) {
+          sample = over(sample, vec4f(gradient_sample.rgb, fill_alpha));
+        }
+      } else {
+        let fill_alpha = fill_coverage * clamp(layer_opacity * shape.fillAlpha, 0.0, 1.0);
+
+        if (fill_alpha > 0.0) {
+          sample = over(sample, vec4f(fill_color(shape), fill_alpha));
+        }
+      }
+    }
+
+    if (stroke_coverage > 0.0) {
+      if (has_shape_style_flag(shape, SHAPE_FLAG_STROKE_GRADIENT)) {
+        let gradient_sample = sample_stroke_gradient(shape, local_p);
+        let stroke_alpha =
+          stroke_coverage * clamp(layer_opacity * shape.strokeAlpha * gradient_sample.a, 0.0, 1.0);
+
+        if (stroke_alpha > 0.0) {
+          sample = over(sample, vec4f(gradient_sample.rgb, stroke_alpha));
+        }
+      } else {
+        let stroke_alpha = stroke_coverage * clamp(layer_opacity * shape.strokeAlpha, 0.0, 1.0);
+
+        if (stroke_alpha > 0.0) {
+          sample = over(sample, vec4f(stroke_color(shape), stroke_alpha));
+        }
+      }
+    }
+
+    if (sample.a <= 0.0001) {
       return vec4f(0.0);
     }
 
-    if (has_shape_style_flag(shape, SHAPE_FLAG_STROKE_GRADIENT)) {
-      let gradient_sample = sample_stroke_gradient(shape, local_p);
-      let alpha =
-        coverage * clamp(layer_opacity * shape.strokeAlpha * gradient_sample.a, 0.0, 1.0);
-
-      if (alpha <= 0.0) {
-        return vec4f(0.0);
-      }
-
-      return vec4f(gradient_sample.rgb, alpha);
-    }
-
-    let alpha = coverage * clamp(layer_opacity * shape.strokeAlpha, 0.0, 1.0);
-
-    return vec4f(stroke_color(shape), alpha);
+    return sample;
   }
 
   let fill_inset = centered_stroke_fill_inset(shape);

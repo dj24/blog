@@ -36,6 +36,7 @@ export const gpuShapeStyleFlags = {
   strokeGradient: 1 << 3,
   fillGradientRadial: 1 << 4,
   strokeGradientRadial: 1 << 5,
+  fillEvenOdd: 1 << 6,
 } as const;
 
 export type GpuShapeRecord = {
@@ -229,9 +230,8 @@ const cubicBezierUnsizedArrayElement = getSizeAndAlignmentOfUnsizedArrayElement(
 );
 const gradientDefinitions = makeShaderDataDefinitions(gpuGradientStopWgsl);
 const gradientStorageDefinition = gradientDefinitions.storages.gradientStops;
-const gradientUnsizedArrayElement = getSizeAndAlignmentOfUnsizedArrayElement(
-  gradientStorageDefinition,
-);
+const gradientUnsizedArrayElement =
+  getSizeAndAlignmentOfUnsizedArrayElement(gradientStorageDefinition);
 
 export const gpuShapeRecordStrideInBytes = unsizedArrayElement.size;
 export const gpuCubicBezierSegmentStrideInBytes = cubicBezierUnsizedArrayElement.size;

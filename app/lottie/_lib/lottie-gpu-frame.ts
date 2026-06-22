@@ -58,6 +58,16 @@ type GradientPaint = {
 
 type PaintStyle = GradientPaint | SolidPaint;
 
+type SolidFill = SolidPaint & {
+  fillRule: number;
+};
+
+type GradientFill = GradientPaint & {
+  fillRule: number;
+};
+
+type FillStyle = GradientFill | SolidFill;
+
 type Stroke = PaintStyle & {
   width: number;
   lineCap: number;
@@ -67,7 +77,7 @@ type Stroke = PaintStyle & {
 };
 
 type ShapeStyle = {
-  fill: PaintStyle | null;
+  fill: FillStyle | null;
   stroke: Stroke | null;
 };
 
@@ -102,6 +112,10 @@ const defaultPaint: Paint = {
 const defaultSolidPaint: SolidPaint = {
   ...defaultPaint,
   kind: "solid",
+};
+const defaultFillStyle: FillStyle = {
+  ...defaultSolidPaint,
+  fillRule: 1,
 };
 const defaultColorStopAlpha = 1;
 const defaultLineCap = 1;
@@ -659,10 +673,7 @@ const mergeFlattenedGpuShapeBuffers = (
   return frames.reduce<FlattenedGpuShapeBuffers>((accumulator, frame) => {
     return {
       shapeRecords: [...accumulator.shapeRecords, ...frame.shapeRecords],
-      cubicBezierSegments: [
-        ...accumulator.cubicBezierSegments,
-        ...frame.cubicBezierSegments,
-      ],
+      cubicBezierSegments: [...accumulator.cubicBezierSegments, ...frame.cubicBezierSegments],
     };
   }, emptyFlattenedGpuShapeBuffers());
 };
@@ -677,12 +688,13 @@ const fillFromItem = ({
   frame: number;
   item: LottieFillShape | LottieGradientFillShape;
   pushGradientStops: (stops: readonly GpuGradientStop[]) => void;
-}): PaintStyle => {
+}): FillStyle => {
   return match(item)
     .with({ ty: "fl" }, (fill) => {
       return {
         kind: "solid" as const,
         color: evaluateProperty(fill.c, frame) ?? defaultPaint.color,
+        fillRule: fill.r ?? 1,
         opacity: numberFrom(fill.o, frame, 100) / 100,
       };
     })
@@ -697,6 +709,7 @@ const fillFromItem = ({
 
       return {
         end: vector2PropertyFrom(fill.e, frame, [0, 0]),
+        fillRule: fill.r ?? 1,
         gradientIndex,
         gradientKind: fill.t ?? 1,
         gradientStopCount: gradientStops.length,
@@ -888,7 +901,7 @@ const createBaseRecord = ({
 }) => {
   const record = createEmptyGpuShapeRecord();
   const transformedPosition = applyMatrix(context.matrix, position);
-  const fill = context.style.fill ?? defaultSolidPaint;
+  const fill = context.style.fill ?? defaultFillStyle;
   const stroke = context.style.stroke;
 
   record.id = id;
@@ -921,6 +934,10 @@ const createBaseRecord = ({
     record.centerY = -fill.start[1];
     record.starInnerRoundness = fill.end[0];
     record.starOuterRoundness = -fill.end[1];
+  }
+
+  if (fill.fillRule === 2) {
+    record.flags |= gpuShapeStyleFlags.fillEvenOdd;
   }
 
   if (stroke?.kind === "gradient") {
@@ -996,22 +1013,93 @@ const pathRecordFromShape = (
     return emptyFlattenedGpuShapeBuffers();
   }
 
+  const pathFill = context.style.fill;
   const pathStroke = context.style.stroke;
 
-  if (!pathStroke) {
+  if (!pathFill && !pathStroke) {
     return emptyFlattenedGpuShapeBuffers();
   }
 
-  const segmentOffset = allocateSegmentOffset(segments.length);
-  const isOpenPath = !geometry.c;
-  const segmentInstances = segments.map((segment, index) => {
-    const uploadedPoints: readonly LottieVector2[] = [
+  const uploadedSegments = segments.map((segment) => {
+    const uploadedPoints = [
       [segment.p0[0], -segment.p0[1]],
       [segment.c1[0], -segment.c1[1]],
       [segment.c2[0], -segment.c2[1]],
       [segment.p3[0], -segment.p3[1]],
+    ] satisfies readonly LottieVector2[];
+
+    return { uploadedPoints };
+  });
+  const shapeRecords: GpuShapeRecord[] = [];
+  const cubicBezierSegments: GpuCubicBezierSegment[] = [];
+
+  if (pathFill) {
+    const fillSegmentOffset = allocateSegmentOffset(segments.length);
+    const fillBounds = boundsFromPoints(
+      uploadedSegments.flatMap((segment) => segment.uploadedPoints),
+    );
+    const fillCenter: LottieVector2 = [
+      (fillBounds.minX + fillBounds.maxX) / 2,
+      (fillBounds.minY + fillBounds.maxY) / 2,
     ];
-    const bounds = boundsFromPoints(uploadedPoints);
+    const record = createBaseRecord({
+      context: {
+        ...context,
+        style: {
+          fill: pathFill,
+          stroke: null,
+        },
+      },
+      id: nextId(),
+      position: [fillCenter[0], -fillCenter[1]],
+    });
+
+    record.kind = gpuShapeKinds.path;
+    record.flags |= geometry.c ? 0 : gpuPathTerminalFlags.start | gpuPathTerminalFlags.end;
+    record.pathIndex = fillSegmentOffset;
+    record.reserved1 = segments.length;
+    record.width = 0;
+    record.boundsMinX = fillBounds.minX - fillCenter[0];
+    record.boundsMinY = fillBounds.minY - fillCenter[1];
+    record.boundsMaxX = fillBounds.maxX - fillCenter[0];
+    record.boundsMaxY = fillBounds.maxY - fillCenter[1];
+
+    shapeRecords.push(record);
+    cubicBezierSegments.push(
+      ...uploadedSegments.map((segment) => {
+        return createCubicBezierSegment(
+          [
+            segment.uploadedPoints[0][0] - fillCenter[0],
+            segment.uploadedPoints[0][1] - fillCenter[1],
+          ],
+          [
+            segment.uploadedPoints[1][0] - fillCenter[0],
+            segment.uploadedPoints[1][1] - fillCenter[1],
+          ],
+          [
+            segment.uploadedPoints[2][0] - fillCenter[0],
+            segment.uploadedPoints[2][1] - fillCenter[1],
+          ],
+          [
+            segment.uploadedPoints[3][0] - fillCenter[0],
+            segment.uploadedPoints[3][1] - fillCenter[1],
+          ],
+        );
+      }),
+    );
+  }
+
+  if (!pathStroke) {
+    return {
+      shapeRecords,
+      cubicBezierSegments,
+    };
+  }
+
+  const strokeSegmentOffset = allocateSegmentOffset(segments.length);
+  const isOpenPath = !geometry.c;
+  const segmentInstances = uploadedSegments.map((segment, index) => {
+    const bounds = boundsFromPoints(segment.uploadedPoints);
     const center: LottieVector2 = [
       (bounds.minX + bounds.maxX) / 2,
       (bounds.minY + bounds.maxY) / 2,
@@ -1020,60 +1108,68 @@ const pathRecordFromShape = (
     return {
       bounds,
       center,
-      segmentIndex: segmentOffset + index,
-      uploadedPoints,
+      segmentIndex: strokeSegmentOffset + index,
+      uploadedPoints: segment.uploadedPoints,
     };
   });
 
   return {
-    shapeRecords: segmentInstances.map((segmentInstance) => {
-      const record = createBaseRecord({
-        context: {
-          ...context,
-          style: {
-            fill: null,
-            stroke: pathStroke,
+    shapeRecords: [
+      ...shapeRecords,
+      ...segmentInstances.map((segmentInstance) => {
+        const record = createBaseRecord({
+          context: {
+            ...context,
+            style: {
+              fill: null,
+              stroke: pathStroke,
+            },
           },
-        },
-        id: nextId(),
-        position: [segmentInstance.center[0], -segmentInstance.center[1]],
-      });
+          id: nextId(),
+          position: [segmentInstance.center[0], -segmentInstance.center[1]],
+        });
 
-      record.kind = gpuShapeKinds.path;
-      record.flags |=
-        (isOpenPath && segmentInstance.segmentIndex === segmentOffset ? gpuPathTerminalFlags.start : 0) |
-        (isOpenPath && segmentInstance.segmentIndex === segmentOffset + segments.length - 1
-          ? gpuPathTerminalFlags.end
-          : 0);
-      record.pathIndex = segmentInstance.segmentIndex;
-      record.width = pathStroke.width;
-      record.boundsMinX = segmentInstance.bounds.minX - segmentInstance.center[0];
-      record.boundsMinY = segmentInstance.bounds.minY - segmentInstance.center[1];
-      record.boundsMaxX = segmentInstance.bounds.maxX - segmentInstance.center[0];
-      record.boundsMaxY = segmentInstance.bounds.maxY - segmentInstance.center[1];
+        record.kind = gpuShapeKinds.path;
+        record.flags |=
+          (isOpenPath && segmentInstance.segmentIndex === strokeSegmentOffset
+            ? gpuPathTerminalFlags.start
+            : 0) |
+          (isOpenPath && segmentInstance.segmentIndex === strokeSegmentOffset + segments.length - 1
+            ? gpuPathTerminalFlags.end
+            : 0);
+        record.pathIndex = segmentInstance.segmentIndex;
+        record.width = pathStroke.width;
+        record.boundsMinX = segmentInstance.bounds.minX - segmentInstance.center[0];
+        record.boundsMinY = segmentInstance.bounds.minY - segmentInstance.center[1];
+        record.boundsMaxX = segmentInstance.bounds.maxX - segmentInstance.center[0];
+        record.boundsMaxY = segmentInstance.bounds.maxY - segmentInstance.center[1];
 
-      return record;
-    }),
-    cubicBezierSegments: segmentInstances.map((segmentInstance) => {
-      return createCubicBezierSegment(
-        [
-          segmentInstance.uploadedPoints[0][0] - segmentInstance.center[0],
-          segmentInstance.uploadedPoints[0][1] - segmentInstance.center[1],
-        ],
-        [
-          segmentInstance.uploadedPoints[1][0] - segmentInstance.center[0],
-          segmentInstance.uploadedPoints[1][1] - segmentInstance.center[1],
-        ],
-        [
-          segmentInstance.uploadedPoints[2][0] - segmentInstance.center[0],
-          segmentInstance.uploadedPoints[2][1] - segmentInstance.center[1],
-        ],
-        [
-          segmentInstance.uploadedPoints[3][0] - segmentInstance.center[0],
-          segmentInstance.uploadedPoints[3][1] - segmentInstance.center[1],
-        ],
-      );
-    }),
+        return record;
+      }),
+    ],
+    cubicBezierSegments: [
+      ...cubicBezierSegments,
+      ...segmentInstances.map((segmentInstance) => {
+        return createCubicBezierSegment(
+          [
+            segmentInstance.uploadedPoints[0][0] - segmentInstance.center[0],
+            segmentInstance.uploadedPoints[0][1] - segmentInstance.center[1],
+          ],
+          [
+            segmentInstance.uploadedPoints[1][0] - segmentInstance.center[0],
+            segmentInstance.uploadedPoints[1][1] - segmentInstance.center[1],
+          ],
+          [
+            segmentInstance.uploadedPoints[2][0] - segmentInstance.center[0],
+            segmentInstance.uploadedPoints[2][1] - segmentInstance.center[1],
+          ],
+          [
+            segmentInstance.uploadedPoints[3][0] - segmentInstance.center[0],
+            segmentInstance.uploadedPoints[3][1] - segmentInstance.center[1],
+          ],
+        );
+      }),
+    ],
   };
 };
 
