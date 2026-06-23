@@ -203,8 +203,8 @@ export const LottieStressPageClient = () => {
             <div>
               <h2 className={styles.panelTitle}>Downloads</h2>
               <p className={styles.panelNote}>
-                Unsupported-region divergence is expected for stars, polygons, trim paths,
-                repeaters, round corners, offset paths, pucker/bloat, and zig zag modifiers.
+                Unsupported-region divergence is expected for trim paths, repeaters, round corners,
+                offset paths, pucker/bloat, and zig zag modifiers.
               </p>
             </div>
             <span className={styles.status} data-status={archiveState.status}>

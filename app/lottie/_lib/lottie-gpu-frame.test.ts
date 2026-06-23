@@ -739,6 +739,63 @@ const animatedWrappedPathJson = JSON.stringify({
   ],
 });
 
+const createPolystarAnimation = ({ sy }: { sy: 1 | 2 }): LottieComposition => {
+  return {
+    v: "5.7.5",
+    fr: 60,
+    ip: 0,
+    op: 10,
+    w: 200,
+    h: 200,
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        ip: 0,
+        op: 10,
+        ks: {
+          o: { a: 0, k: 100 },
+        },
+        shapes: [
+          {
+            ty: "gr",
+            it: [
+              {
+                ty: "sr",
+                sy,
+                pt: { a: 0, k: 6 },
+                p: { a: 0, k: [12, -8] },
+                or: { a: 0, k: 40 },
+                os: { a: 0, k: 10 },
+                r: { a: 0, k: 30 },
+                ir: { a: 0, k: 18 },
+                is: { a: 0, k: 12 },
+              },
+              {
+                ty: "fl",
+                c: { a: 0, k: [0.2, 0.4, 0.8] },
+                o: { a: 0, k: 80 },
+              },
+              {
+                ty: "st",
+                c: { a: 0, k: [1, 1, 1] },
+                o: { a: 0, k: 50 },
+                w: { a: 0, k: 4 },
+              },
+              {
+                ty: "tr",
+                p: { a: 0, k: [100, 90] },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
 describe("Lottie GPU frame conversion", () => {
   test("converts supported first-frame square.lottie primitives to GPU shape records", async () => {
     const animation = await loadSquareAnimation();
@@ -1054,6 +1111,39 @@ describe("Lottie GPU frame conversion", () => {
     assert.ok((midFrame.gradientStops[0]?.red ?? 0) < 1);
     assert.ok((midFrame.gradientStops[0]?.green ?? 0) < 1);
     assertApproximatelyEqual(endFrame.gradientStops[0]?.green ?? 0, 1);
+  });
+
+  test("emits GPU polystar records for polygon shapes", () => {
+    const frame = createLottieGpuFrame(createPolystarAnimation({ sy: 2 }), 0);
+    const polygon = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.polystar);
+
+    assert.ok(polygon);
+    assertApproximatelyEqual(polygon.positionX, 112);
+    assertApproximatelyEqual(polygon.positionY, 82);
+    assertApproximatelyEqual(polygon.radiusX, 40);
+    assertApproximatelyEqual(polygon.radiusY, 40);
+    assertApproximatelyEqual(polygon.cornerRadius, 6);
+    assertApproximatelyEqual(polygon.starInnerRoundness, 10);
+    assertApproximatelyEqual(polygon.starOuterRoundness, 10);
+    assertApproximatelyEqual(polygon.starAngle, 30);
+    assert.equal(polygon.polygonMode, 2);
+    assertApproximatelyEqual(polygon.fillAlpha, 0.8);
+    assertApproximatelyEqual(polygon.strokeAlpha, 0.5);
+    assertApproximatelyEqual(polygon.strokeWidth, 4);
+    assertApproximatelyEqual(polygon.boundsMinX, -40);
+    assertApproximatelyEqual(polygon.boundsMaxY, 40);
+  });
+
+  test("emits GPU polystar records for star shapes", () => {
+    const frame = createLottieGpuFrame(createPolystarAnimation({ sy: 1 }), 0);
+    const star = frame.shapeRecords.find((record) => record.kind === gpuShapeKinds.polystar);
+
+    assert.ok(star);
+    assertApproximatelyEqual(star.radiusX, 40);
+    assertApproximatelyEqual(star.radiusY, 18);
+    assertApproximatelyEqual(star.starInnerRoundness, 12);
+    assertApproximatelyEqual(star.starOuterRoundness, 10);
+    assert.equal(star.polygonMode, 1);
   });
 
   test("encodes path segment shapes and cubic segments with the expected layout", () => {

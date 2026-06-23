@@ -19,7 +19,9 @@ type SupportedCounts = {
   gradientStrokes: number;
   groups: number;
   paths: number;
+  polygons: number;
   rectangles: number;
+  stars: number;
   shapeLayers: number;
   solidFills: number;
   solidStrokes: number;
@@ -980,7 +982,9 @@ const createSupportedCounts = (): SupportedCounts => {
     gradientStrokes: 0,
     groups: 0,
     paths: 0,
+    polygons: 0,
     rectangles: 0,
+    stars: 0,
     shapeLayers: 0,
     solidFills: 0,
     solidStrokes: 0,
@@ -1073,12 +1077,12 @@ const countShapeItem = ({
     })
     .with("sr", () => {
       if (shape.sy === 2) {
-        unsupportedCounts.polygons += 1;
+        supportedCounts.polygons += 1;
 
         return;
       }
 
-      unsupportedCounts.stars += 1;
+      supportedCounts.stars += 1;
     })
     .with("tm", () => {
       unsupportedCounts.trimPaths += 1;
