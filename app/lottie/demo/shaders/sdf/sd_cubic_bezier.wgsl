@@ -1,85 +1,3 @@
-fn dot2(v: vec2f) -> f32 {
-  return dot(v, v);
-}
-
-fn positive_mod(x: f32, y: f32) -> f32 {
-  return x - y * floor(x / y);
-}
-
-fn sd_box(p: vec2f, b: vec2f) -> f32 {
-  let d = abs(p) - b;
-  return length(max(d, vec2f(0.0))) + min(max(d.x, d.y), 0.0);
-}
-
-fn sd_rounded_box(p: vec2f, b: vec2f, radii: vec4f) -> f32 {
-  let selected_xy = select(radii.zw, radii.xy, p.x > 0.0);
-  let corner_radius = select(selected_xy.y, selected_xy.x, p.y > 0.0);
-  let q = abs(p) - b + vec2f(corner_radius);
-  return min(max(q.x, q.y), 0.0) + length(max(q, vec2f(0.0))) - corner_radius;
-}
-
-fn op_round(sd_shape: f32, r: f32) -> f32 {
-  return sd_shape - r;
-}
-
-fn sd_ellipse(p_in: vec2f, ab_in: vec2f) -> f32 {
-  var p = abs(p_in);
-  var ab = ab_in;
-
-  if (p.x > p.y) {
-    p = p.yx;
-    ab = ab.yx;
-  }
-
-  let l = ab.y * ab.y - ab.x * ab.x;
-  let m = ab.x * p.x / l;
-  let m2 = m * m;
-  let n = ab.y * p.y / l;
-  let n2 = n * n;
-  let c = (m2 + n2 - 1.0) / 3.0;
-  let c3 = c * c * c;
-  let q = c3 + 2.0 * m2 * n2;
-  let d = c3 + m2 * n2;
-  let g = m + m * n2;
-
-  var co: f32;
-
-  if (d < 0.0) {
-    let h = acos(q / c3) / 3.0;
-    let s = cos(h);
-    let t = sin(h) * sqrt(3.0);
-    let rx = sqrt(-c * (s + t + 2.0) + m2);
-    let ry = sqrt(-c * (s - t + 2.0) + m2);
-    co = (ry + sign(l) * rx + abs(g) / (rx * ry) - m) / 2.0;
-  } else {
-    let h = 2.0 * m * n * sqrt(d);
-    let s = sign(q + h) * pow(abs(q + h), 1.0 / 3.0);
-    let u = sign(q - h) * pow(abs(q - h), 1.0 / 3.0);
-    let rx = -s - u - 4.0 * c + 2.0 * m2;
-    let ry = (s - u) * sqrt(3.0);
-    let rm = sqrt(rx * rx + ry * ry);
-    co = (ry / sqrt(rm - rx) + 2.0 * g / rm - m) / 2.0;
-  }
-
-  let r = ab * vec2f(co, sqrt(1.0 - co * co));
-  return length(r - p) * sign(p.y - r.y);
-}
-
-fn sd_star(p_in: vec2f, r: f32, n: i32, m: f32) -> f32 {
-  let an = 3.141593 / f32(n);
-  let en = 3.141593 / m;
-  let acs = vec2f(cos(an), sin(an));
-  let ecs = vec2f(cos(en), sin(en));
-
-  let bn = positive_mod(atan2(p_in.x, p_in.y), 2.0 * an) - an;
-
-  var p = length(p_in) * vec2f(cos(bn), abs(sin(bn)));
-  p -= r * acs;
-  p += ecs * clamp(-dot(p, ecs), 0.0, r * acs.y / ecs.y);
-
-  return length(p) * sign(p.x);
-}
-
 const CUBIC_BEZIER_SDF_ITERATIONS: i32 = 2;
 const COMPLEX_EPSILON: f32 = 0.000001;
 
@@ -137,14 +55,6 @@ fn ccbrt_complex(a: vec2f) -> vec2f {
 
 fn cubic_complex(a: vec2f, b: vec2f, c: vec2f, d: vec2f, x: vec2f) -> vec2f {
   return cmul_complex(cmul_complex(cmul_complex(a, x) + b, x) + c, x) + d;
-}
-
-fn select_root_candidate(current_best: vec2f, candidate: vec2f) -> vec2f {
-  if (abs(candidate.y) < abs(current_best.y)) {
-    return candidate;
-  }
-
-  return current_best;
 }
 
 fn cubic_bezier_complex_roots(a: vec2f, b: vec2f, c: vec2f, d: vec2f) -> CubicRoots {
@@ -224,22 +134,22 @@ fn sd_cubic_bezier(pos: vec2f, p0: vec2f, p1: vec2f, p2: vec2f, p3: vec2f) -> f3
   var best_t = 0.0;
   var best_distance = length(p0 - pos);
 
-  var t0 = newton_bezier(qa, qb, qc, qd, qe, qf, roots.x0.x);
-  var distance0 = length(cubic_complex(a, b, c, d, vec2f(t0, 0.0)));
+  let t0 = newton_bezier(qa, qb, qc, qd, qe, qf, roots.x0.x);
+  let distance0 = length(cubic_complex(a, b, c, d, vec2f(t0, 0.0)));
   if (distance0 < best_distance) {
     best_t = t0;
     best_distance = distance0;
   }
 
-  var t1 = newton_bezier(qa, qb, qc, qd, qe, qf, roots.x1.x);
-  var distance1 = length(cubic_complex(a, b, c, d, vec2f(t1, 0.0)));
+  let t1 = newton_bezier(qa, qb, qc, qd, qe, qf, roots.x1.x);
+  let distance1 = length(cubic_complex(a, b, c, d, vec2f(t1, 0.0)));
   if (distance1 < best_distance) {
     best_t = t1;
     best_distance = distance1;
   }
 
-  var t2 = newton_bezier(qa, qb, qc, qd, qe, qf, roots.x2.x);
-  var distance2 = length(cubic_complex(a, b, c, d, vec2f(t2, 0.0)));
+  let t2 = newton_bezier(qa, qb, qc, qd, qe, qf, roots.x2.x);
+  let distance2 = length(cubic_complex(a, b, c, d, vec2f(t2, 0.0)));
   if (distance2 < best_distance) {
     best_t = t2;
     best_distance = distance2;

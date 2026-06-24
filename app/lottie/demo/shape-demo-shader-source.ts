@@ -5,7 +5,12 @@ import {
   gpuShapeRecordWgsl,
 } from "../_lib/gpu-shape-record";
 import mainSource from "./shaders/main.wgsl";
-import sdfUtilsSource from "./shaders/sdf_utils.wgsl";
+import sdfUtilsSource from "./shaders/sdf/utils.wgsl";
+import sdfBoxSource from "./shaders/sdf/sd_box.wgsl";
+import sdfRoundedBoxSource from "./shaders/sdf/sd_rounded_box.wgsl";
+import sdfEllipseSource from "./shaders/sdf/sd_ellipse.wgsl";
+import sdfStarSource from "./shaders/sdf/sd_star.wgsl";
+import sdfCubicBezierSource from "./shaders/sdf/sd_cubic_bezier.wgsl";
 import shapeRenderSource from "./shaders/shape_render.wgsl";
 
 const getRawShaderSource = (source: unknown, label: string) => {
@@ -30,7 +35,14 @@ export const buildShapeDemoShaderSource = ({
 }: {
   rasterTargetFormat: "bgra8unorm" | "rgba8unorm";
 }) => {
-  const sdfUtils = getRawShaderSource(sdfUtilsSource, "sdf_utils.wgsl");
+  const sdfSources = [
+    getRawShaderSource(sdfUtilsSource, "utils.wgsl"),
+    getRawShaderSource(sdfBoxSource, "sd_box.wgsl"),
+    getRawShaderSource(sdfRoundedBoxSource, "sd_rounded_box.wgsl"),
+    getRawShaderSource(sdfEllipseSource, "sd_ellipse.wgsl"),
+    getRawShaderSource(sdfStarSource, "sd_star.wgsl"),
+    getRawShaderSource(sdfCubicBezierSource, "sd_cubic_bezier.wgsl"),
+  ];
   const cubicBezierSegments = gpuCubicBezierSegmentWgsl;
   const gradientStops = gpuGradientStopWgsl;
   const shapeRender = getRawShaderSource(shapeRenderSource, "shape_render.wgsl");
@@ -40,7 +52,7 @@ export const buildShapeDemoShaderSource = ({
   );
 
   return `
-${sdfUtils}
+${sdfSources.join("\n\n")}
 
 ${gpuShapeRecordWgsl}
 
