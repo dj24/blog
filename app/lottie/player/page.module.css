@@ -1,8 +1,7 @@
 .page {
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgb(255 225 192 / 0.88), transparent 34%),
-    linear-gradient(135deg, #f7f0df 0%, #f3e1be 46%, #d9e7d0 100%);
+  max-width: 1500px;
+  margin: 0 auto;
   color: #1a1712;
   padding: clamp(24px, 5vw, 64px);
 }

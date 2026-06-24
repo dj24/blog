@@ -73,7 +73,7 @@ const resolveNumber = (property: LottieNumberProperty | undefined, fallback: num
     return fallback;
   }
 
-  return property.a === 0 ? property.k : property.k[0]?.s ?? fallback;
+  return property.a === 0 ? property.k : (property.k[0]?.s ?? fallback);
 };
 
 const resolveVector2 = (property: LottieVector2Property | undefined, fallback: LottieVector2) => {
@@ -81,7 +81,7 @@ const resolveVector2 = (property: LottieVector2Property | undefined, fallback: L
     return fallback;
   }
 
-  return property.a === 0 ? property.k : property.k[0]?.s ?? fallback;
+  return property.a === 0 ? property.k : (property.k[0]?.s ?? fallback);
 };
 
 const resolvePath = (shape: Extract<KnownLottieShapeItem, { ty: "sh" }>) => {
@@ -339,14 +339,13 @@ const createFitTransform = (bounds: Bounds): LottieShapeItem => {
 
 const wrapPreviewGroup = (
   items: LottieShapeItem[],
-  bounds =
-    mergeBounds(
-      items
-        .map((item) => {
-          return getShapeBounds(item as KnownLottieShapeItem);
-        })
-        .filter(isBounds),
-    ) ?? defaultBounds,
+  bounds = mergeBounds(
+    items
+      .map((item) => {
+        return getShapeBounds(item as KnownLottieShapeItem);
+      })
+      .filter(isBounds),
+  ) ?? defaultBounds,
 ): LottieShapeGroup => {
   return {
     it: [...items, createFitTransform(bounds)],
@@ -364,7 +363,6 @@ const createPreviewShapes = (shapeType: ShapeType): LottieShapeItem[] => {
             createGradientFill(),
             createBaseEllipse([14, -8], [34, 34]),
             createSolidStroke([0.18, 0.25, 0.46], 4),
-            createTransform({ position: [0, 0] }),
           ],
           ty: "gr",
         } satisfies LottieShapeGroup,
@@ -376,6 +374,9 @@ const createPreviewShapes = (shapeType: ShapeType): LottieShapeItem[] => {
         createSolidFill([0.95, 0.64, 0.22]),
         createSolidStroke([0.54, 0.16, 0.1], 4),
       ]),
+    ])
+    .with("fl", () => [
+      wrapPreviewGroup([createBaseRectangle(), createSolidFill([0.94, 0.6, 0.22])]),
     ])
     .with("rc", () => [
       wrapPreviewGroup([
@@ -398,7 +399,7 @@ const createPreviewShapes = (shapeType: ShapeType): LottieShapeItem[] => {
         createSolidStroke([0.2, 0.24, 0.37], 3),
       ]),
     ])
-    .with("fl", () => [wrapPreviewGroup([createBaseRectangle(), createSolidFill([0.94, 0.6, 0.22])])])
+
     .with("gf", () => [
       wrapPreviewGroup([
         createBaseRectangle(),
@@ -406,7 +407,9 @@ const createPreviewShapes = (shapeType: ShapeType): LottieShapeItem[] => {
         createSolidStroke([0.18, 0.25, 0.46], 3),
       ]),
     ])
-    .with("st", () => [wrapPreviewGroup([createBasePath(), createSolidStroke([0.54, 0.16, 0.1], 7)])])
+    .with("st", () => [
+      wrapPreviewGroup([createBasePath(), createSolidStroke([0.54, 0.16, 0.1], 7)]),
+    ])
     .with("gs", () => [wrapPreviewGroup([createBasePath(), createGradientStroke()])])
     .with("no", () => [
       wrapPreviewGroup([
