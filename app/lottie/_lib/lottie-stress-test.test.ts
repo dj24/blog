@@ -42,8 +42,8 @@ describe("Lottie stress test generator", () => {
     assert.ok(summary.supportedCounts.rectangles > 0);
     assert.ok(summary.supportedCounts.ellipses > 0);
     assert.ok(summary.supportedCounts.paths > 0);
-    assert.ok(summary.unsupportedCounts.stars > 0);
-    assert.ok(summary.unsupportedCounts.polygons > 0);
+    assert.ok(summary.supportedCounts.stars > 0);
+    assert.ok(summary.supportedCounts.polygons > 0);
     assert.ok(summary.unsupportedCounts.trimPaths > 0);
     assert.ok(summary.unsupportedCounts.repeaters > 0);
     assert.ok(summary.unsupportedCounts.roundCorners > 0);

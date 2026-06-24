@@ -1,5 +1,6 @@
 const SHAPE_KIND_RECTANGLE: u32 = 1u;
 const SHAPE_KIND_ELLIPSE: u32 = 2u;
+const SHAPE_KIND_POLYSTAR: u32 = 3u;
 const SHAPE_KIND_PATH: u32 = 4u;
 const PATH_TERMINAL_START: u32 = 1u;
 const PATH_TERMINAL_END: u32 = 2u;
@@ -171,12 +172,16 @@ fn has_visible_stroke(shape: ShapeRecord) -> bool {
   return shape.strokeAlpha > 0.001 && shape.strokeWidth > 0.001;
 }
 
-fn centered_stroke_fill_inset(shape: ShapeRecord) -> f32 {
+fn object_stroke_half_width(shape: ShapeRecord) -> f32 {
   if (!has_visible_stroke(shape)) {
     return 0.0;
   }
 
-  return shape.strokeWidth * 0.5;
+  return shape.strokeWidth * 0.25;
+}
+
+fn centered_stroke_fill_inset(shape: ShapeRecord) -> f32 {
+  return object_stroke_half_width(shape);
 }
 
 fn has_path_terminal_flag(shape: ShapeRecord, terminal_flag: u32) -> bool {
@@ -696,6 +701,20 @@ fn evaluate_shape_sdf(shape: ShapeRecord, local_p: vec2f) -> f32 {
     return sd_ellipse(local_p, radii);
   }
 
+  if (shape.kind == SHAPE_KIND_POLYSTAR) {
+    let point_count = max(i32(round(shape.cornerRadius)), 3);
+    let outer_radius = max(shape.radiusX, 1.0);
+    let inner_radius = clamp(shape.radiusY, 0.001, outer_radius);
+    let star_ratio = clamp(f32(point_count) * inner_radius / (outer_radius + inner_radius), 2.0, f32(point_count));
+    let polygon_ratio = 2.0;
+    let star_parameter = select(star_ratio, polygon_ratio, shape.polygonMode == 2u);
+    let rotated_p = rotate_point(local_p, -shape.starAngle * 0.017453292519943295);
+    let base_sdf = sd_star(rotated_p, outer_radius, point_count, star_parameter);
+    let roundness = select(shape.starInnerRoundness, shape.starOuterRoundness, shape.polygonMode == 2u);
+
+    return op_round(base_sdf, max(roundness, 0.0) * outer_radius * 0.01);
+  }
+
   if (shape.kind == SHAPE_KIND_PATH) {
     if (has_visible_fill(shape)) {
       return evaluate_path_fill_sdf(shape, local_p);
@@ -782,7 +801,7 @@ fn rasterized_shape_sample(shape: ShapeRecord, pixel_pos: vec2f) -> vec4f {
   );
   let stroke_coverage = select(
     0.0,
-    fill_from_sdf(abs(sd) - shape.strokeWidth * 0.5, aa_width),
+    fill_from_sdf(abs(sd) - object_stroke_half_width(shape), aa_width),
     has_visible_stroke(shape),
   );
   var sample = vec4f(0.0);
