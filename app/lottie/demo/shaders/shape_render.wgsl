@@ -171,12 +171,16 @@ fn has_visible_stroke(shape: ShapeRecord) -> bool {
   return shape.strokeAlpha > 0.001 && shape.strokeWidth > 0.001;
 }
 
-fn centered_stroke_fill_inset(shape: ShapeRecord) -> f32 {
+fn object_stroke_half_width(shape: ShapeRecord) -> f32 {
   if (!has_visible_stroke(shape)) {
     return 0.0;
   }
 
-  return shape.strokeWidth * 0.5;
+  return shape.strokeWidth * 0.25;
+}
+
+fn centered_stroke_fill_inset(shape: ShapeRecord) -> f32 {
+  return object_stroke_half_width(shape);
 }
 
 fn has_path_terminal_flag(shape: ShapeRecord, terminal_flag: u32) -> bool {
@@ -782,7 +786,7 @@ fn rasterized_shape_sample(shape: ShapeRecord, pixel_pos: vec2f) -> vec4f {
   );
   let stroke_coverage = select(
     0.0,
-    fill_from_sdf(abs(sd) - shape.strokeWidth * 0.5, aa_width),
+    fill_from_sdf(abs(sd) - object_stroke_half_width(shape), aa_width),
     has_visible_stroke(shape),
   );
   var sample = vec4f(0.0);
