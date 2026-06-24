@@ -29,6 +29,7 @@ import type {
   LottieGradientFillShape,
   LottieGradientStrokeShape,
   LottiePathShape,
+  LottiePolystarShape,
   LottieRectangleShape,
   LottieShapeGroup,
   LottieStrokeShape,
@@ -999,6 +1000,37 @@ const ellipseRecordFromShape = (
   return record;
 };
 
+const polystarRecordFromShape = (
+  shape: LottiePolystarShape,
+  context: WalkContext,
+  frame: number,
+  id: number,
+) => {
+  const pointCount = Math.max(3, Math.round(numberFrom(shape.pt, frame, 3)));
+  const outerRadius = Math.max(0, numberFrom(shape.or, frame, 0));
+  const innerRadius =
+    shape.sy === 2 ? outerRadius : Math.max(0, numberFrom(shape.ir, frame, outerRadius / 2));
+  const outerRoundness = numberFrom(shape.os, frame, 0);
+  const innerRoundness = shape.sy === 2 ? outerRoundness : numberFrom(shape.is, frame, 0);
+  const position = vector2PropertyFrom(shape.p, frame, [0, 0]);
+  const record = createBaseRecord({ context, id, position });
+
+  record.kind = gpuShapeKinds.polystar;
+  record.radiusX = outerRadius;
+  record.radiusY = innerRadius;
+  record.cornerRadius = pointCount;
+  record.starInnerRoundness = innerRoundness;
+  record.starOuterRoundness = outerRoundness;
+  record.starAngle = numberFrom(shape.r, frame, 0);
+  record.polygonMode = shape.sy ?? 1;
+  record.boundsMinX = -outerRadius;
+  record.boundsMinY = -outerRadius;
+  record.boundsMaxX = outerRadius;
+  record.boundsMaxY = outerRadius;
+
+  return record;
+};
+
 const pathRecordFromShape = (
   shape: LottiePathShape,
   context: WalkContext,
@@ -1242,6 +1274,15 @@ const shapeRecordsFromItem = (
   if (item.ty === "el") {
     return {
       shapeRecords: [ellipseRecordFromShape(item as LottieEllipseShape, context, frame, nextId())],
+      cubicBezierSegments: [],
+    };
+  }
+
+  if (item.ty === "sr") {
+    return {
+      shapeRecords: [
+        polystarRecordFromShape(item as LottiePolystarShape, context, frame, nextId()),
+      ],
       cubicBezierSegments: [],
     };
   }
