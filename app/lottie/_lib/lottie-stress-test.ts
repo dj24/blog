@@ -866,6 +866,7 @@ const createUnsupportedModifierGroups = () => {
     return {
       it: [
         basePath,
+        modifier,
         index % 2 === 0
           ? createGradientStroke({
               colors,
@@ -877,7 +878,6 @@ const createUnsupportedModifierGroups = () => {
               color: colors[1],
               width: 6,
             }),
-        modifier,
         createTransform({
           position: createLoopedPosition({
             center,
@@ -891,6 +891,77 @@ const createUnsupportedModifierGroups = () => {
         }),
       ],
       nm: `unsupported modifier group ${index + 1}`,
+      ty: "gr",
+    } as const satisfies LottieShapeItem;
+  });
+};
+
+const createZigZagStressGroups = () => {
+  const zigZagCenters: readonly LottieVector2[] = [
+    [128, 742],
+    [304, 742],
+    [480, 742],
+  ];
+
+  return zigZagCenters.map((center, index) => {
+    const colors = [
+      unsupportedPalette[(index + 1) % unsupportedPalette.length] ?? unsupportedPalette[0],
+      unsupportedPalette[(index + 2) % unsupportedPalette.length] ?? unsupportedPalette[1],
+      unsupportedPalette[(index + 3) % unsupportedPalette.length] ?? unsupportedPalette[2],
+    ] as const;
+
+    return {
+      it: [
+        {
+          d: 1,
+          ks: staticPath({
+            c: false,
+            i: [
+              [0, 0],
+              [0, 0],
+            ],
+            o: [
+              [0, 0],
+              [0, 0],
+            ],
+            v: [
+              [-72, 0],
+              [72, 0],
+            ],
+          }),
+          nm: `zig zag base path ${index + 1}`,
+          ty: "sh",
+        },
+        {
+          nm: `zig zag modifier ${index + 1}`,
+          pt: staticNumber(index % 2 === 0 ? 1 : 2),
+          r: staticNumber(8 + index * 2),
+          s: animatedNumber([
+            { e: 18 + index * 4, s: 10 + index * 3, t: mixedPhaseStart },
+            { e: 12 + index * 3, s: 18 + index * 4, t: peakPhaseStart },
+            { s: 12 + index * 3, t: lastFrame },
+          ]),
+          ty: "zz",
+        },
+        createGradientStroke({
+          colors,
+          end: [72, 24],
+          start: [-72, -24],
+          width: 8,
+        }),
+        createTransform({
+          position: createLoopedPosition({
+            center,
+            xOffset: 20 + index * 3,
+            yOffset: 12 + index * 2,
+          }),
+          rotation: createLoopedRotation({
+            amount: 12 + index * 6,
+            start: index % 2 === 0 ? -6 : 6,
+          }),
+        }),
+      ],
+      nm: `dedicated zig zag stress group ${index + 1}`,
       ty: "gr",
     } as const satisfies LottieShapeItem;
   });
@@ -951,8 +1022,14 @@ const createStressTestLayers = () => {
       shapes: createUnsupportedModifierGroups(),
     }),
     createShapeLayer({
-      inFrame: peakPhaseStart,
+      inFrame: mixedPhaseStart,
       index: 7,
+      name: "unsupported zig zags",
+      shapes: createZigZagStressGroups(),
+    }),
+    createShapeLayer({
+      inFrame: peakPhaseStart,
+      index: 8,
       name: "peak overlay",
       shapes: createPeakOverlayGroups(),
     }),

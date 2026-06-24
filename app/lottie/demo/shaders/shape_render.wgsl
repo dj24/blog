@@ -871,8 +871,7 @@ fn rasterize_tiled_scene_for_tile(pixel_pos: vec2f, tile_coord: vec2u) -> vec4f 
   let tile_index = tile_coord.y * tile_res.x + tile_coord.x;
   let shape_count = min(atomicLoad(&tileShapeCounts[tile_index]), demoUniforms.maxShapesPerTile);
   let heatmap_ratio = f32(shape_count) / 8.0;
-  var accumulated_color = heatmap_color_from_ratio(heatmap_ratio);
-  var accumulated_alpha = 1.0;
+  var accumulated = vec4f(heatmap_color_from_ratio(heatmap_ratio), 0.3);
 
   for (var shape_index = 0u; shape_index < shape_count; shape_index = shape_index + 1u) {
     let primitive_index =
@@ -885,13 +884,10 @@ fn rasterize_tiled_scene_for_tile(pixel_pos: vec2f, tile_coord: vec2u) -> vec4f 
       continue;
     }
 
-    let color = sample.rgb;
-
-    accumulated_color = color * alpha + accumulated_color * (1.0 - alpha);
-    accumulated_alpha = alpha + accumulated_alpha * (1.0 - alpha);
+    accumulated = over(accumulated, sample);
   }
 
-  return vec4f(accumulated_color, accumulated_alpha);
+  return accumulated;
 }
 
 fn rasterize_tiled_scene(pixel_pos: vec2f) -> vec4f {

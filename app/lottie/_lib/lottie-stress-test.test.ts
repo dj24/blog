@@ -49,6 +49,6 @@ describe("Lottie stress test generator", () => {
     assert.ok(summary.unsupportedCounts.roundCorners > 0);
     assert.ok(summary.unsupportedCounts.offsetPaths > 0);
     assert.ok(summary.unsupportedCounts.puckerBloat > 0);
-    assert.ok(summary.unsupportedCounts.zigZag > 0);
+    assert.ok(summary.unsupportedCounts.zigZag >= 4);
   });
 });

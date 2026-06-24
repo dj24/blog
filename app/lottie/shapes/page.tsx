@@ -54,49 +54,25 @@ export type KnownLottieShapeItem =
 export const metadata: Metadata = {
   title: "Lottie Shapes",
   description:
-    "Isolated previews and controls for the currently modeled Lottie shape items plus synthetic text and image layers.",
-};
-
-export type PlaygroundTextSample = {
-  ty: "text";
-  text: string;
-  fontSize: number;
-  color: [number, number, number];
-  opacity: number;
-  position: [number, number];
-  fontFamily: string;
-};
-
-export type PlaygroundImageSample = {
-  ty: "image";
-  src: string;
-  width: number;
-  height: number;
-  opacity: number;
-  position: [number, number];
-  alt: string;
+    "Isolated dotLottie previews for the currently modeled Lottie shape items.",
 };
 
 export type ShapeSample = {
   id: string;
+  kind: "shape";
   label: string;
   origin: string;
-} & (
-  | {
-      kind: "shape";
-      shape: KnownLottieShapeItem;
-    }
-  | {
-      kind: "text";
-      textLayer: PlaygroundTextSample;
-    }
-  | {
-      kind: "image";
-      imageLayer: PlaygroundImageSample;
-    }
-);
+  shape: KnownLottieShapeItem;
+};
 
-type ShapeType = KnownLottieShapeItem["ty"];
+export type ShapeType = KnownLottieShapeItem["ty"];
+
+export type ShapePreviewSample = {
+  id: string;
+  label: string;
+  origin: string;
+  shapeType: ShapeType;
+};
 
 const assetDirectory = path.join(process.cwd(), "app", "lottie", "_assets");
 const assetPaths = [
@@ -146,53 +122,6 @@ const shapeTypeLabels: Record<ShapeType, string> = {
   op: "offset path",
   zz: "zig zag",
   tr: "transform",
-};
-
-const syntheticTextSample: ShapeSample = {
-  id: "synthetic-text",
-  kind: "text",
-  label: "text layer",
-  origin: "synthetic fallback",
-  textLayer: {
-    ty: "text",
-    text: "Lottie",
-    fontSize: 64,
-    color: [0.12, 0.16, 0.24],
-    opacity: 100,
-    position: [0, 20],
-    fontFamily: "Georgia",
-  },
-};
-
-const syntheticImageMarkup = encodeURIComponent(`
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220">
-    <defs>
-      <linearGradient id="sky" x1="0%" x2="100%" y1="0%" y2="100%">
-        <stop offset="0%" stop-color="#fefae0" />
-        <stop offset="100%" stop-color="#ccd5ae" />
-      </linearGradient>
-    </defs>
-    <rect width="320" height="220" rx="28" fill="url(#sky)" />
-    <circle cx="76" cy="72" r="24" fill="#dda15e" />
-    <path d="M0 184L92 112l58 44 46-32 124 60v36H0Z" fill="#6b705c" />
-    <path d="M114 116l26-30 28 34 20-18 42 50H88Z" fill="#a98467" />
-  </svg>
-`);
-
-const syntheticImageSample: ShapeSample = {
-  id: "synthetic-image",
-  kind: "image",
-  label: "image layer",
-  origin: "synthetic fallback",
-  imageLayer: {
-    ty: "image",
-    src: `data:image/svg+xml;charset=utf-8,${syntheticImageMarkup}`,
-    width: 160,
-    height: 110,
-    opacity: 100,
-    position: [0, 0],
-    alt: "Stylized landscape card",
-  },
 };
 
 const syntheticShapeSamples: Partial<Record<ShapeType, KnownLottieShapeItem>> = {
@@ -382,11 +311,19 @@ const getShapeSamples = async () => {
     return sample;
   });
 
-  return [...shapeSamples, syntheticTextSample, syntheticImageSample];
+  return shapeSamples;
 };
 
 const Page = async () => {
   const shapeSamples = await getShapeSamples();
+  const shapePreviews = shapeSamples.map((sample) => {
+    return {
+      id: sample.id,
+      label: sample.label,
+      origin: sample.origin,
+      shapeType: sample.shape.ty,
+    } satisfies ShapePreviewSample;
+  });
 
   return (
     <main className={styles.page}>
@@ -396,10 +333,10 @@ const Page = async () => {
           <span className={styles.panelBadge}>identity matrix</span>
         </div>
         <p className={styles.panelSummary}>
-          Previews are intentionally simple and focus on the raw shape item, text layer, or image
-          layer itself rather than full layer composition semantics.
+          Each preview is generated as its own small Lottie composition so the browser player is
+          rendering files instead of local drawing commands.
         </p>
-        <ShapeRenderingPlayground shapeSamples={shapeSamples} />
+        <ShapeRenderingPlayground shapeSamples={shapePreviews} />
       </section>
     </main>
   );
