@@ -158,6 +158,74 @@ const createStaticPathAnimation = (closed: boolean): LottieComposition => {
   };
 };
 
+const createZigZagPathAnimation = (): LottieComposition => {
+  return {
+    v: "5.7.5",
+    fr: 60,
+    ip: 0,
+    op: 10,
+    w: 200,
+    h: 200,
+    layers: [
+      {
+        ddd: 0,
+        ind: 1,
+        ty: 4,
+        ip: 0,
+        op: 10,
+        ks: {
+          o: { a: 0, k: 100 },
+        },
+        shapes: [
+          {
+            ty: "gr",
+            it: [
+              {
+                ty: "sh",
+                ks: {
+                  a: 0,
+                  k: {
+                    c: false,
+                    v: [
+                      [0, 0],
+                      [40, 0],
+                    ],
+                    i: [
+                      [0, 0],
+                      [0, 0],
+                    ],
+                    o: [
+                      [0, 0],
+                      [0, 0],
+                    ],
+                  },
+                },
+              },
+              {
+                ty: "zz",
+                r: { a: 0, k: 4 },
+                s: { a: 0, k: 10 },
+                pt: { a: 0, k: 1 },
+              },
+              {
+                ty: "st",
+                c: { a: 0, k: [1, 0, 0] },
+                o: { a: 0, k: 100 },
+                w: { a: 0, k: 4 },
+              },
+              {
+                ty: "tr",
+                p: { a: 0, k: [80, 80] },
+                o: { a: 0, k: 100 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+};
+
 const createRectangleWithSolidStrokeAnimation = (): LottieComposition => {
   return {
     v: "5.7.5",
@@ -1157,5 +1225,32 @@ describe("Lottie GPU frame conversion", () => {
     assert.ok(endFrame.cubicBezierSegments.length > 0);
     assert.notEqual(startFrame.shapeRecords[0]?.positionY, endFrame.shapeRecords[0]?.positionY);
     assert.notEqual(startFrame.cubicBezierSegments[0]?.p0Y, endFrame.cubicBezierSegments[0]?.p0Y);
+  });
+
+  test("applies zig zag modifiers to path geometry", () => {
+    const frame = createLottieGpuFrame(createZigZagPathAnimation(), 0);
+    const record = frame.shapeRecords[0];
+    const secondRecord = frame.shapeRecords[1];
+    const firstSegment = frame.cubicBezierSegments[0];
+    const secondSegment = frame.cubicBezierSegments[1];
+
+    assert.equal(frame.shapeRecords.length, 4);
+    assert.equal(frame.cubicBezierSegments.length, 4);
+    assert.equal(record?.zigZagAmplitude, 5);
+    assert.equal(record?.zigZagFrequency, 4);
+    assert.equal(record?.zigZagPoints, 1);
+    assert.equal(record?.flags, gpuPathTerminalFlags.start);
+    assert.ok(firstSegment);
+    assert.ok(secondSegment);
+    assert.notEqual(firstSegment.p0Y, firstSegment.p3Y);
+    assert.notEqual(Math.sign(firstSegment.p0Y), Math.sign(firstSegment.p3Y));
+    assert.equal(
+      (record?.positionX ?? 0) + firstSegment.p3X,
+      (secondRecord?.positionX ?? 0) + secondSegment.p0X,
+    );
+    assert.equal(
+      (record?.positionY ?? 0) + firstSegment.p3Y,
+      (secondRecord?.positionY ?? 0) + secondSegment.p0Y,
+    );
   });
 });
