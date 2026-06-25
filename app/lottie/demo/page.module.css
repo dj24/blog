@@ -95,19 +95,13 @@
 }
 
 .canvas {
-  display: block;
-  margin: 0 auto;
-  aspect-ratio: 1;
-  background: transparent;
-}
-
-.canvasFrameCompact {
   display: flex;
   flex-direction: column;
-}
-
-.canvasCompact {
+  margin: 0 auto;
+  border: 1px solid #1f2937;
   width: 100%;
+  aspect-ratio: 1;
+  background: transparent;
 }
 
 .renderTiming {

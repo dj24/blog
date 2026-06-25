@@ -1035,16 +1035,9 @@ export const WebGpuShapeDemoClient = ({
   }, [webGpuShapeDemoQuery.data]);
 
   return (
-    <div className={compact ? `${styles.demo} ${styles.demoCompact}` : styles.demo}>
-      <div
-        className={
-          compact ? `${styles.canvasFrame} ${styles.canvasFrameCompact}` : styles.canvasFrame
-        }
-      >
-        <canvas
-          ref={canvasRef}
-          className={compact ? `${styles.canvas} ${styles.canvasCompact}` : styles.canvas}
-        />
+    <div className={styles.demo}>
+      <div className={styles.canvasFrame}>
+        <canvas ref={canvasRef} className={styles.canvas} />
       </div>
       <p className={styles.renderTiming}>{renderTimingLabel}</p>
     </div>
