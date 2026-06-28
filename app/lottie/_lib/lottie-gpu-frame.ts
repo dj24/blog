@@ -28,6 +28,7 @@ import type {
   LottieFillShape,
   LottieGradientFillShape,
   LottieGradientStrokeShape,
+  LottieOffsetPathShape,
   LottiePathShape,
   LottiePolystarShape,
   LottieRectangleShape,
@@ -82,9 +83,16 @@ type ShapeStyle = {
   stroke: Stroke | null;
 };
 
+type PathOffset = {
+  amount: number;
+  lineJoin: number;
+  miterLimit: number;
+};
+
 type WalkContext = {
   matrix: Matrix2d;
   opacity: number;
+  pathOffset: PathOffset | null;
   style: ShapeStyle;
 };
 
@@ -123,6 +131,8 @@ const defaultLineCap = 1;
 const defaultLineJoin = 1;
 const defaultMiterLimit = 4;
 const defaultBlendMode = 0;
+const defaultOffsetLineJoin = 1;
+const defaultOffsetMiterLimit = 4;
 const defaultBezierPathGeometry: LottieBezierPathGeometry = {
   c: false,
   v: [],
@@ -131,6 +141,7 @@ const defaultBezierPathGeometry: LottieBezierPathGeometry = {
 };
 const cubicBezierEpsilon = 0.000001;
 const cubicBezierIterations = 8;
+const offsetPathEpsilon = 0.000001;
 
 const multiplyMatrices = (left: Matrix2d, right: Matrix2d): Matrix2d => {
   return [
@@ -775,8 +786,12 @@ const strokeFromItem = ({
 const bezierPathGeometryFrom = (
   shape: LottiePathShape,
   frame: number,
+  pathOffset: PathOffset | null,
 ): LottieBezierPathGeometry => {
-  return normalizeBezierPathGeometry(evaluateProperty(shape.ks, frame));
+  return offsetBezierPathGeometry(
+    normalizeBezierPathGeometry(evaluateProperty(shape.ks, frame)),
+    pathOffset,
+  );
 };
 
 const createCubicBezierSegment = (
@@ -797,6 +812,126 @@ const createCubicBezierSegment = (
   segment.p3Y = p3[1];
 
   return segment;
+};
+
+const subtractVector2 = (left: LottieVector2, right: LottieVector2): LottieVector2 => {
+  return [left[0] - right[0], left[1] - right[1]];
+};
+
+const addVector2 = (left: LottieVector2, right: LottieVector2): LottieVector2 => {
+  return [left[0] + right[0], left[1] + right[1]];
+};
+
+const scaleVector2 = (value: LottieVector2, scale: number): LottieVector2 => {
+  return [value[0] * scale, value[1] * scale];
+};
+
+const vectorLength = (value: LottieVector2) => {
+  return Math.hypot(value[0], value[1]);
+};
+
+const normalizeVector2 = (value: LottieVector2): LottieVector2 => {
+  const length = vectorLength(value);
+
+  if (length <= offsetPathEpsilon) {
+    return [0, 0];
+  }
+
+  return [value[0] / length, value[1] / length];
+};
+
+const leftNormalFromDirection = (direction: LottieVector2): LottieVector2 => {
+  const normalized = normalizeVector2(direction);
+
+  return [-normalized[1], normalized[0]];
+};
+
+const fallbackNormalAtVertex = (
+  geometry: LottieBezierPathGeometry,
+  index: number,
+): LottieVector2 => {
+  const pointCount = geometry.v.length;
+  const current = geometry.v[index] ?? [0, 0];
+  const previousIndex = index === 0 ? pointCount - 1 : index - 1;
+  const nextIndex = (index + 1) % pointCount;
+  const previous = geometry.v[previousIndex] ?? current;
+  const next = geometry.v[nextIndex] ?? current;
+
+  if (!geometry.c && index === 0) {
+    return leftNormalFromDirection(subtractVector2(next, current));
+  }
+
+  if (!geometry.c && index === pointCount - 1) {
+    return leftNormalFromDirection(subtractVector2(current, previous));
+  }
+
+  const previousNormal = leftNormalFromDirection(subtractVector2(current, previous));
+  const nextNormal = leftNormalFromDirection(subtractVector2(next, current));
+  const joinedNormal = addVector2(previousNormal, nextNormal);
+
+  if (vectorLength(joinedNormal) <= offsetPathEpsilon) {
+    return nextNormal;
+  }
+
+  return normalizeVector2(joinedNormal);
+};
+
+const normalAtVertex = (geometry: LottieBezierPathGeometry, index: number): LottieVector2 => {
+  const pointCount = geometry.v.length;
+  const current = geometry.v[index] ?? [0, 0];
+  const previousIndex = index === 0 ? pointCount - 1 : index - 1;
+  const nextIndex = (index + 1) % pointCount;
+  const incoming = geometry.i[index] ?? [0, 0];
+  const outgoing = geometry.o[index] ?? [0, 0];
+  const previousPoint = geometry.v[previousIndex] ?? current;
+  const nextPoint = geometry.v[nextIndex] ?? current;
+  const incomingDirection =
+    vectorLength(incoming) > offsetPathEpsilon
+      ? scaleVector2(incoming, -1)
+      : subtractVector2(current, previousPoint);
+  const outgoingDirection =
+    vectorLength(outgoing) > offsetPathEpsilon ? outgoing : subtractVector2(nextPoint, current);
+
+  if (!geometry.c && index === 0) {
+    return leftNormalFromDirection(outgoingDirection);
+  }
+
+  if (!geometry.c && index === pointCount - 1) {
+    return leftNormalFromDirection(incomingDirection);
+  }
+
+  const incomingNormal = leftNormalFromDirection(incomingDirection);
+  const outgoingNormal = leftNormalFromDirection(outgoingDirection);
+  const joinedNormal = addVector2(incomingNormal, outgoingNormal);
+
+  if (vectorLength(joinedNormal) <= offsetPathEpsilon) {
+    return fallbackNormalAtVertex(geometry, index);
+  }
+
+  return normalizeVector2(joinedNormal);
+};
+
+const offsetBezierPathGeometry = (
+  geometry: LottieBezierPathGeometry,
+  offset: PathOffset | null,
+): LottieBezierPathGeometry => {
+  if (!offset || Math.abs(offset.amount) <= offsetPathEpsilon || geometry.v.length === 0) {
+    return geometry;
+  }
+
+  const vertexNormals = geometry.v.map((_, index) => normalAtVertex(geometry, index));
+  const offsetAt = (index: number) => {
+    const normal = vertexNormals[index] ?? [0, 0];
+
+    return scaleVector2(normal, offset.amount);
+  };
+
+  return {
+    c: geometry.c,
+    i: geometry.i,
+    o: geometry.o,
+    v: geometry.v.map((vertex, index) => addVector2(vertex, offsetAt(index))),
+  };
 };
 
 const boundsFromPoints = (points: readonly LottieVector2[]) => {
@@ -891,6 +1026,26 @@ const groupStyle = ({
   }, inheritedStyle);
 };
 
+const groupPathOffset = (
+  group: LottieShapeGroup,
+  inheritedPathOffset: PathOffset | null,
+  frame: number,
+) => {
+  return group.it.reduce<PathOffset | null>((pathOffset, item) => {
+    if (!hasShapeType(item) || item.ty !== "op") {
+      return pathOffset;
+    }
+
+    const offsetPath = item as LottieOffsetPathShape;
+
+    return {
+      amount: numberFrom(offsetPath.a, frame, 0),
+      lineJoin: offsetPath.lj ?? defaultOffsetLineJoin,
+      miterLimit: numberFrom(offsetPath.ml, frame, defaultOffsetMiterLimit),
+    };
+  }, inheritedPathOffset);
+};
+
 const createBaseRecord = ({
   context,
   id,
@@ -925,6 +1080,12 @@ const createBaseRecord = ({
   record.strokeLineCap = stroke?.lineCap ?? defaultLineCap;
   record.strokeLineJoin = stroke?.lineJoin ?? defaultLineJoin;
   record.strokeBlendMode = stroke?.blendMode ?? defaultBlendMode;
+
+  if (context.pathOffset) {
+    record.offsetAmount = context.pathOffset.amount;
+    record.strokeLineJoin = context.pathOffset.lineJoin;
+    record.strokeMiterLimit = context.pathOffset.miterLimit;
+  }
 
   if (fill.kind === "gradient") {
     record.flags |= gpuShapeStyleFlags.fillGradient;
@@ -1038,7 +1199,7 @@ const pathRecordFromShape = (
   nextId: () => number,
   allocateSegmentOffset: (segmentCount: number) => number,
 ): FlattenedGpuShapeBuffers => {
-  const geometry = bezierPathGeometryFrom(shape, frame);
+  const geometry = bezierPathGeometryFrom(shape, frame, context.pathOffset);
   const segments = cubicSegmentsFromGeometry(geometry);
 
   if (segments.length === 0) {
@@ -1223,6 +1384,7 @@ const shapeRecordsFromItem = (
     const groupContext = createContextWithTransform(
       {
         ...context,
+        pathOffset: groupPathOffset(group, context.pathOffset, frame),
         style: groupStyle({
           allocateGradientOffset,
           frame,
@@ -1243,7 +1405,8 @@ const shapeRecordsFromItem = (
             child.ty === "fl" ||
             child.ty === "gf" ||
             child.ty === "st" ||
-            child.ty === "gs"
+            child.ty === "gs" ||
+            child.ty === "op"
           ) {
             return emptyFlattenedGpuShapeBuffers();
           }
@@ -1317,6 +1480,7 @@ const contextFromLayer = (layer: LottieShapeLayer, frame: number): WalkContext =
   return {
     matrix: multiplyMatrices(identityMatrix, transformMatrix(resolved)),
     opacity: resolved.opacity,
+    pathOffset: null,
     style: {
       fill: null,
       stroke: null,
