@@ -6,6 +6,7 @@ import { Bayer } from "./_components/bayer/bayer";
 import { Card } from "./_components/card/card";
 import { DitherSettingsSection } from "./_components/dither-settings-section/dither-settings-section";
 import { DownloadButton } from "./_components/download-button/download-button";
+import { DitherDrawer } from "./_components/dither-drawer/dither-drawer";
 import { PreviewCanvas } from "./_components/preview-canvas/preview-canvas";
 import { RenderTime } from "./_components/render-time/render-time";
 import { Resolution } from "./_components/resolution/resolution";
@@ -41,55 +42,57 @@ const Page = () => {
           </div>
           <PreviewCanvas defaultImageUrl={pearlEarring.src} />
         </section>
-        <section className={styles.rightPanel}>
-          <h1 className={styles.pageTitle}>ordered dithering</h1>
-          <div className={`${styles.section} ${styles.uploadSection}`}>
-            <h2 className={styles.sectionTitle}>upload</h2>
-            <div className={styles.uploadCard}>
-              <Card>
-                <div className={styles.cardRow}>
-                  <p>select file</p>
-                  <UploadButton />
-                </div>
-              </Card>
+        <DitherDrawer>
+          <section className={styles.rightPanel}>
+            <h1 className={styles.pageTitle}>ordered dithering</h1>
+            <div className={`${styles.section} ${styles.uploadSection}`}>
+              <h2 className={styles.sectionTitle}>upload</h2>
+              <div className={styles.uploadCard}>
+                <Card>
+                  <div className={styles.cardRow}>
+                    <p>select file</p>
+                    <UploadButton />
+                  </div>
+                </Card>
+              </div>
             </div>
-          </div>
-          <div className={styles.bayerGraphic}>
-            <div className={styles.bayerStack}>
-              <Bayer tlFilled />
-              <Bayer tlFilled brFilled />
-              <Bayer tlFilled brFilled trFilled />
-              <Bayer trFilled blFilled brFilled tlFilled />
+            <div className={styles.bayerGraphic}>
+              <div className={styles.bayerStack}>
+                <Bayer tlFilled />
+                <Bayer tlFilled brFilled />
+                <Bayer tlFilled brFilled trFilled />
+                <Bayer trFilled blFilled brFilled tlFilled />
+              </div>
             </div>
-          </div>
-          <DitherSettingsSection />
-          <div aria-hidden className={`${styles.titleWord} ${styles.ditheringWord}`}>
-            dithering
-          </div>
-          <div className={`${styles.section} ${styles.exportSection}`}>
-            <h2 className={styles.sectionTitle}>export</h2>
-            <div className={styles.jpegCard}>
-              <Card>
-                <div className={styles.cardRow}>
-                  <p>jpeg</p>
-                  <DownloadButton format="jpeg" />
-                </div>
-              </Card>
+            <DitherSettingsSection />
+            <div aria-hidden className={`${styles.titleWord} ${styles.ditheringWord}`}>
+              dithering
             </div>
-            <div className={styles.pngCard}>
-              <Card>
-                <div className={styles.cardRow}>
-                  <p>png</p>
-                  <DownloadButton format="png" />
-                </div>
-              </Card>
+            <div className={`${styles.section} ${styles.exportSection}`}>
+              <h2 className={styles.sectionTitle}>export</h2>
+              <div className={styles.jpegCard}>
+                <Card>
+                  <div className={styles.cardRow}>
+                    <p>jpeg</p>
+                    <DownloadButton format="jpeg" />
+                  </div>
+                </Card>
+              </div>
+              <div className={styles.pngCard}>
+                <Card>
+                  <div className={styles.cardRow}>
+                    <p>png</p>
+                    <DownloadButton format="png" />
+                  </div>
+                </Card>
+              </div>
             </div>
-          </div>
-          <div aria-hidden className={`${styles.titleWord} ${styles.orderedWord}`}>
-            ordered
-            <Arc />
-          </div>
-        </section>
+            <div aria-hidden className={`${styles.titleWord} ${styles.orderedWord}`}>
+              ordered
+              <Arc />
+            </div>
+          </section>
+        </DitherDrawer>
       </main>
     </>
   );

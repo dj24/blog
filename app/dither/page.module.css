@@ -204,3 +204,40 @@ body {
   grid-row: 3;
   color: var(--accent);
 }
+
+@media (max-width: 1023px) {
+  .bayerGraphic,
+  .titleWord {
+    display: none;
+  }
+
+  .leftPanel {
+    width: 100%;
+    height: 100dvh;
+    padding: max(1rem, var(--dither-spacing));
+    padding-bottom: 0;
+  }
+
+  .previewStats {
+    padding-right: clamp(3.5rem, 12vmin, 5rem);
+
+    h2 {
+      font-size: clamp(1.5rem, 5vmin, 2.5rem);
+    }
+  }
+
+  .rightPanel {
+    width: 100%;
+    min-height: 100%;
+    padding: max(1.5rem, 5vmin);
+    padding-top: clamp(5rem, 14vmin, 6rem);
+
+    h2 {
+      font-size: clamp(2rem, 7vmin, 3rem);
+    }
+
+    p {
+      font-size: clamp(0.75rem, 2.5vmin, 1rem);
+    }
+  }
+}

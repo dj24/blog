@@ -1,0 +1,61 @@
+.menuButton,
+.backdrop {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .menuButton {
+    display: block;
+    position: fixed;
+    top: max(1rem, var(--dither-spacing));
+    right: max(1rem, var(--dither-spacing));
+    z-index: 3;
+
+    button {
+      width: clamp(2.5rem, 8vmin, 3.5rem);
+      height: clamp(2.5rem, 8vmin, 3.5rem);
+    }
+  }
+
+  .icon {
+    width: 45%;
+    height: 30%;
+    border-top: 0.15rem solid var(--background);
+    border-bottom: 0.15rem solid var(--background);
+  }
+
+  .backdrop {
+    display: block;
+    position: fixed;
+    z-index: 1;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgb(33 31 36 / 55%);
+    cursor: default;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease-out;
+  }
+
+  .backdropVisible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .drawer {
+    position: fixed;
+    z-index: 2;
+    inset: 0 0 0 auto;
+    width: min(30rem, 92vw);
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 180ms ease-out;
+  }
+
+  .drawerOpen {
+    transform: translateX(0);
+  }
+}
