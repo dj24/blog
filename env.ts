@@ -6,6 +6,7 @@ const booleanLikeSchema = z.enum(["0", "1", "false", "true", "no", "yes", "off",
 export const env = createEnv({
   server: {
     ANALYZE: booleanLikeSchema.optional(),
+    ENABLE_BLOG_PAGE: booleanLikeSchema.optional(),
     ENABLE_LOTTIE_ROUTES: booleanLikeSchema.optional(),
     VERCEL_PROJECT_PRODUCTION_URL: z.string().min(1).optional(),
     VERCEL_URL: z.string().min(1).optional(),

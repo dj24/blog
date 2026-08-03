@@ -1,0 +1,42 @@
+# React Playbook
+
+## Boolean props are usually a code-smell
+
+I can understand the appeal of boolean props - I can add a "switch" to a component that alters the way it functions. The issue is how boolean props _compound_.
+
+Adding your first boolean prop means you need to ensure 2 states are represented by your component. Adding subsequent booleans exponentially increases the number of [representable states](https://functional-architecture.org/make_illegal_states_unrepresentable/), and therefore the maintenance cost.
+
+This can be mitigated with TypeScript tricks, or with a library such as [ts-pattern](https://github.com/gvergnaud/ts-pattern) to ensure all permutations are handled.
+
+In practice, each developer adding a new boolean prop to a component will be biased - ensuring only their new shiny prop works correctly, without ensuring all other existing paths through the component work as intended.
+
+## Access DOM APIs outside of the render lifecycle
+
+```ts
+// Animation
+```
+
+## Create components for subscriptions
+
+As a rule of thumb; if a hook has no consumed return value, make it a component. When you add a hook to a component, you are subscribing to render when the hook's state updates.
+
+By refactoring a subscription to be a component, it can be returned with the rest of the JSX, and update independently.
+
+```tsx
+const AnimatedLogo = () => {
+  useAnimation();
+
+  return <Logo />;
+};
+
+export const Page = () => {
+  return (
+    <main>
+      <Article />
+      <AnimatedLogo />
+    </main>
+  );
+};
+```
+
+## Abstract sparingly
