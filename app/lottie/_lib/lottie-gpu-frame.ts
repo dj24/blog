@@ -34,6 +34,7 @@ import type {
   LottieShapeGroup,
   LottieStrokeShape,
   LottieTransformShape,
+  LottieZigZagShape,
 } from "./types/lottie-shape";
 
 type Matrix2d = readonly [number, number, number, number, number, number];
@@ -82,10 +83,17 @@ type ShapeStyle = {
   stroke: Stroke | null;
 };
 
+type ZigZagModifier = {
+  amplitude: number;
+  frequency: number;
+  points: number;
+};
+
 type WalkContext = {
   matrix: Matrix2d;
   opacity: number;
   style: ShapeStyle;
+  zigZags: readonly ZigZagModifier[];
 };
 
 type ShapeItemWithType = {
@@ -131,6 +139,7 @@ const defaultBezierPathGeometry: LottieBezierPathGeometry = {
 };
 const cubicBezierEpsilon = 0.000001;
 const cubicBezierIterations = 8;
+const zigZagMinimumSegmentLength = 0.000001;
 
 const multiplyMatrices = (left: Matrix2d, right: Matrix2d): Matrix2d => {
   return [
@@ -840,6 +849,124 @@ const cubicSegmentsFromGeometry = (geometry: LottieBezierPathGeometry) => {
   });
 };
 
+const lineGeometryFromPoints = ({
+  closed,
+  points,
+}: {
+  closed: boolean;
+  points: readonly LottieVector2[];
+}): LottieBezierPathGeometry => {
+  return {
+    c: closed,
+    v: [...points],
+    i: points.map(() => [0, 0] as LottieVector2),
+    o: points.map(() => [0, 0] as LottieVector2),
+  };
+};
+
+const sampleCubic = (
+  p0: LottieVector2,
+  c1: LottieVector2,
+  c2: LottieVector2,
+  p3: LottieVector2,
+  progress: number,
+): LottieVector2 => {
+  return [
+    cubicBezier(p0[0], c1[0], c2[0], p3[0], progress),
+    cubicBezier(p0[1], c1[1], c2[1], p3[1], progress),
+  ];
+};
+
+const zigZagPointsFromSegment = ({
+  amplitude,
+  c1,
+  c2,
+  frequency,
+  p0,
+  p3,
+}: {
+  amplitude: number;
+  c1: LottieVector2;
+  c2: LottieVector2;
+  frequency: number;
+  p0: LottieVector2;
+  p3: LottieVector2;
+}) => {
+  const ridgeCount = Math.max(1, Math.round(frequency));
+
+  return Array.from({ length: ridgeCount + 1 }, (_, ridgeIndex) => {
+    const progress = ridgeIndex / ridgeCount;
+    const point = sampleCubic(p0, c1, c2, p3, progress);
+    const tangentStart = sampleCubic(p0, c1, c2, p3, Math.max(0, progress - 0.001));
+    const tangentEnd = sampleCubic(p0, c1, c2, p3, Math.min(1, progress + 0.001));
+    const tangentX = tangentEnd[0] - tangentStart[0];
+    const tangentY = tangentEnd[1] - tangentStart[1];
+    const length = Math.hypot(tangentX, tangentY);
+
+    if (length <= zigZagMinimumSegmentLength) {
+      return point;
+    }
+
+    const direction = ridgeIndex % 2 === 0 ? -1 : 1;
+    const offset = amplitude * direction;
+
+    return [
+      point[0] + (-tangentY / length) * offset,
+      point[1] + (tangentX / length) * offset,
+    ] as LottieVector2;
+  });
+};
+
+const applyZigZagModifier = (
+  geometry: LottieBezierPathGeometry,
+  modifier: ZigZagModifier,
+): LottieBezierPathGeometry => {
+  if (modifier.frequency <= 0 || Math.abs(modifier.amplitude) <= zigZagMinimumSegmentLength) {
+    return geometry;
+  }
+
+  const segments = cubicSegmentsFromGeometry(geometry);
+
+  if (segments.length === 0) {
+    return geometry;
+  }
+
+  const points = segments.flatMap((segment, segmentIndex) => {
+    const segmentPoints = zigZagPointsFromSegment({
+      amplitude: modifier.amplitude,
+      c1: segment.c1,
+      c2: segment.c2,
+      frequency: modifier.frequency,
+      p0: segment.p0,
+      p3: segment.p3,
+    });
+
+    return segmentIndex === 0 ? segmentPoints : segmentPoints.slice(1);
+  });
+
+  return lineGeometryFromPoints({ closed: geometry.c, points });
+};
+
+const applyZigZagModifiers = (
+  geometry: LottieBezierPathGeometry,
+  modifiers: readonly ZigZagModifier[],
+) => {
+  return modifiers.reduce((currentGeometry, modifier) => {
+    return applyZigZagModifier(currentGeometry, modifier);
+  }, geometry);
+};
+
+const zigZagModifierFromItem = (
+  item: LottieZigZagShape,
+  frame: number,
+): ZigZagModifier => {
+  return {
+    amplitude: numberFrom(item.s, frame, 0) / 2,
+    frequency: numberFrom(item.r, frame, 0),
+    points: numberFrom(item.pt, frame, 1),
+  };
+};
+
 const groupTransform = (group: LottieShapeGroup) => {
   return group.it.find((item): item is LottieTransformShape => {
     return hasShapeType(item) && item.ty === "tr";
@@ -889,6 +1016,14 @@ const groupStyle = ({
 
     return style;
   }, inheritedStyle);
+};
+
+const groupZigZags = (group: LottieShapeGroup, frame: number) => {
+  return group.it
+    .filter((item): item is LottieZigZagShape => {
+      return hasShapeType(item) && item.ty === "zz";
+    })
+    .map((item) => zigZagModifierFromItem(item, frame));
 };
 
 const createBaseRecord = ({
@@ -1038,7 +1173,7 @@ const pathRecordFromShape = (
   nextId: () => number,
   allocateSegmentOffset: (segmentCount: number) => number,
 ): FlattenedGpuShapeBuffers => {
-  const geometry = bezierPathGeometryFrom(shape, frame);
+  const geometry = applyZigZagModifiers(bezierPathGeometryFrom(shape, frame), context.zigZags);
   const segments = cubicSegmentsFromGeometry(geometry);
 
   if (segments.length === 0) {
@@ -1047,6 +1182,7 @@ const pathRecordFromShape = (
 
   const pathFill = context.style.fill;
   const pathStroke = context.style.stroke;
+  const zigZag = context.zigZags[context.zigZags.length - 1];
 
   if (!pathFill && !pathStroke) {
     return emptyFlattenedGpuShapeBuffers();
@@ -1090,6 +1226,9 @@ const pathRecordFromShape = (
     record.flags |= geometry.c ? 0 : gpuPathTerminalFlags.start | gpuPathTerminalFlags.end;
     record.pathIndex = fillSegmentOffset;
     record.reserved1 = segments.length;
+    record.zigZagAmplitude = zigZag?.amplitude ?? 0;
+    record.zigZagFrequency = zigZag?.frequency ?? 0;
+    record.zigZagPoints = zigZag?.points ?? 0;
     record.width = 0;
     record.boundsMinX = fillBounds.minX - fillCenter[0];
     record.boundsMinY = fillBounds.minY - fillCenter[1];
@@ -1170,6 +1309,9 @@ const pathRecordFromShape = (
             ? gpuPathTerminalFlags.end
             : 0);
         record.pathIndex = segmentInstance.segmentIndex;
+        record.zigZagAmplitude = zigZag?.amplitude ?? 0;
+        record.zigZagFrequency = zigZag?.frequency ?? 0;
+        record.zigZagPoints = zigZag?.points ?? 0;
         record.width = pathStroke.width;
         record.boundsMinX = segmentInstance.bounds.minX - segmentInstance.center[0];
         record.boundsMinY = segmentInstance.bounds.minY - segmentInstance.center[1];
@@ -1230,6 +1372,7 @@ const shapeRecordsFromItem = (
           inheritedStyle: context.style,
           pushGradientStops,
         }),
+        zigZags: [...context.zigZags, ...groupZigZags(group, frame)],
       },
       groupTransform(group),
       frame,
@@ -1243,7 +1386,8 @@ const shapeRecordsFromItem = (
             child.ty === "fl" ||
             child.ty === "gf" ||
             child.ty === "st" ||
-            child.ty === "gs"
+            child.ty === "gs" ||
+            child.ty === "zz"
           ) {
             return emptyFlattenedGpuShapeBuffers();
           }
@@ -1321,6 +1465,7 @@ const contextFromLayer = (layer: LottieShapeLayer, frame: number): WalkContext =
       fill: null,
       stroke: null,
     },
+    zigZags: [],
   };
 };
 
